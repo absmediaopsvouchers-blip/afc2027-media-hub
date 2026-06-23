@@ -63,11 +63,11 @@ async function migrate() {
       subtitle TEXT
     );
     CREATE TABLE IF NOT EXISTS locations (
-      id     TEXT PRIMARY KEY,
-      name   TEXT NOT NULL,
-      type   TEXT NOT NULL,
-      zone   TEXT,
-      window TEXT
+      id       TEXT PRIMARY KEY,
+      name     TEXT NOT NULL,
+      type     TEXT NOT NULL,
+      zone     TEXT,
+      "window" TEXT
     );
     CREATE TABLE IF NOT EXISTS users (
       email                TEXT PRIMARY KEY,
@@ -136,7 +136,7 @@ async function seedIfEmpty() {
 
   for (const l of seed.locations) {
     await q(
-      'INSERT INTO locations (id, name, type, zone, window) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING',
+      'INSERT INTO locations (id, name, type, zone, "window") VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING',
       [l.id, l.name, l.type, l.zone, l.window]
     );
   }
@@ -223,7 +223,7 @@ async function getLocation(id) {
 }
 
 async function createLocation(loc) {
-  await q('INSERT INTO locations (id, name, type, zone, window) VALUES ($1,$2,$3,$4,$5)', [
+  await q('INSERT INTO locations (id, name, type, zone, "window") VALUES ($1,$2,$3,$4,$5)', [
     loc.id, loc.name, loc.type, loc.zone, loc.window,
   ]);
   return loc;
@@ -236,7 +236,7 @@ async function updateLocation(id, fields) {
   for (const f of allowed) {
     if (fields[f] !== undefined) {
       vals.push(fields[f]);
-      sets.push(`${f} = $${vals.length}`);
+      sets.push(`"${f}" = $${vals.length}`);
     }
   }
   if (!sets.length) return getLocation(id);
@@ -352,7 +352,7 @@ async function updateNews(id, fields) {
   for (const f of allowed) {
     if (fields[f] !== undefined) {
       vals.push(fields[f]);
-      sets.push(`${f} = $${vals.length}`);
+      sets.push(`"${f}" = $${vals.length}`);
     }
   }
   if (!sets.length) {
@@ -390,7 +390,7 @@ async function updatePress(id, fields) {
   for (const f of allowed) {
     if (fields[f] !== undefined) {
       vals.push(fields[f]);
-      sets.push(`${f} = $${vals.length}`);
+      sets.push(`"${f}" = $${vals.length}`);
     }
   }
   if (!sets.length) {

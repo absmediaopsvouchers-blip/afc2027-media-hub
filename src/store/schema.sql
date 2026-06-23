@@ -15,11 +15,11 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 CREATE TABLE IF NOT EXISTS locations (
-  id     TEXT PRIMARY KEY,
-  name   TEXT NOT NULL,
-  type   TEXT NOT NULL,            -- 'MMC' | 'Stadium' | 'Training'
-  zone   TEXT,
-  window TEXT
+  id       TEXT PRIMARY KEY,
+  name     TEXT NOT NULL,
+  type     TEXT NOT NULL,          -- 'MMC' | 'Stadium' | 'Training'
+  zone     TEXT,
+  "window" TEXT                    -- quoted: WINDOW is a reserved keyword
 );
 
 CREATE TABLE IF NOT EXISTS users (
