@@ -11,6 +11,9 @@ npm-debug.log*
 # Regenerable artifacts (recreate with `npm run qr`)
 client-app-qr.png
 
+# Tunnel binary (downloaded on demand)
+cloudflared.exe
+
 # Local, machine-specific Claude Code settings
 .claude/settings.local.json
 

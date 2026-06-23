@@ -16,6 +16,7 @@ const ADMIN_TABS = [
   { id: 'venues', label: 'Venues' },
   { id: 'news', label: 'News' },
   { id: 'press', label: 'Press' },
+  { id: 'transport', label: 'Transport' },
 ];
 const NEWS_CATS = ['Announcement', 'Alert', 'Operations', 'Transport', 'Catering'];
 const PC_STATUS = ['Scheduled', 'Live', 'Delayed', 'Concluded'];
@@ -26,6 +27,10 @@ const VENUE_TYPES = [
   { v: 'Training', label: 'Training Site' },
 ];
 const VENUE_TYPE_LABEL = { MMC: 'Main Media Centre', Stadium: 'Stadium', Training: 'Training Site' };
+const TRANSPORT_TYPES = [
+  { v: 'Stadium', label: 'Stadium shuttle' },
+  { v: 'Training', label: 'Training-site shuttle' },
+];
 
 const adminState = {
   tab: 'overview',
@@ -33,6 +38,7 @@ const adminState = {
   news: [],
   press: [],
   venues: [],
+  transport: [],
   pollTimer: null,
   scanner: null, // { stream, video, timer }
 };
@@ -134,6 +140,7 @@ function renderPanel() {
   if (adminState.tab === 'venues') return renderVenuesMgr();
   if (adminState.tab === 'news') return renderNewsMgr();
   if (adminState.tab === 'press') return renderPressMgr();
+  if (adminState.tab === 'transport') return renderTransportMgr();
 }
 
 function handleAdminErr(e) {
@@ -764,6 +771,117 @@ async function savePress(id) {
 async function deletePress(id) {
   if (!confirm('Delete this press conference?')) return;
   try { await API.del('/press-conferences/' + id, true); toast('Deleted.', 'success'); await loadPress(); }
+  catch (e) { handleAdminErr(e); }
+}
+
+/* =============================================================================
+   TRANSPORT / SHUTTLE MANAGER
+   ========================================================================== */
+
+async function renderTransportMgr() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <div class="admin-head">
+      <h2>Transport &amp; shuttle manager</h2>
+      <button class="btn btn-primary btn-sm" id="tr-add">${ICONS.plus}<span>Add route</span></button>
+    </div>
+    <p class="mgr-note">${ICONS.info}<span>Routes appear on the client app's <strong>Transport</strong> tab, grouped by type (Stadium / Training-site shuttles).</span></p>
+    <div id="tr-editor"></div>
+    <div class="card" id="tr-list">${loadingHtml()}</div>`;
+  document.getElementById('tr-add').addEventListener('click', () => openTransportEditor(null));
+  await loadTransport();
+}
+
+async function loadTransport() {
+  try { adminState.transport = await API.get('/transport'); }
+  catch (e) { const el = document.getElementById('tr-list'); if (el) el.innerHTML = errorHtml(e.message); return; }
+  renderTransportList();
+}
+
+function renderTransportList() {
+  const el = document.getElementById('tr-list');
+  if (!el) return;
+  const list = adminState.transport;
+  if (!list.length) { el.innerHTML = '<div class="empty" style="padding:28px">No shuttle routes yet. Add your first route.</div>'; return; }
+  el.innerHTML = list.map((t) => {
+    const cls = t.type === 'Training' ? 'badge-green' : 'badge-blue';
+    return `<div class="mgr-item">
+      <div class="mgr-main">
+        <div class="mgr-title"><span class="badge ${cls}">${esc(t.type)}</span><span>${esc(t.route)}</span></div>
+        <div class="mgr-sub">${esc(t.frequency || '—')} · first ${esc(t.firstDeparture || '—')} · last ${esc(t.lastDeparture || '—')} · ${esc(t.duration || '—')}</div>
+        ${t.notes ? `<div class="mgr-body">${esc(t.notes)}</div>` : ''}
+      </div>
+      <div class="mgr-actions">
+        <button class="btn btn-ghost btn-icon" title="Edit" data-edit="${esc(t.id)}">${ICONS.edit}</button>
+        <button class="btn btn-danger btn-icon" title="Delete" data-del="${esc(t.id)}">${ICONS.trash}</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-edit]').forEach((b) =>
+    b.addEventListener('click', () => openTransportEditor(adminState.transport.find((t) => t.id === b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach((b) =>
+    b.addEventListener('click', () => deleteTransport(b.dataset.del)));
+}
+
+function openTransportEditor(item) {
+  const ed = document.getElementById('tr-editor');
+  const it = item || { route: '', type: 'Stadium', from: 'Main Media Centre', to: '', frequency: '', firstDeparture: '', lastDeparture: '', duration: '', notes: '' };
+  ed.innerHTML = `
+    <div class="editor">
+      <div class="field"><label>Route name <span class="hint">— leave blank to auto-build from destination</span></label>
+        <input class="input" id="tr-route" value="${esc(it.route)}" placeholder="e.g. MMC ⇄ King Fahd International Stadium"></div>
+      <div class="row2">
+        <div class="field"><label>Type</label>
+          <select class="select" id="tr-type">${TRANSPORT_TYPES.map((t) => `<option value="${t.v}" ${t.v === it.type ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
+        <div class="field"><label>Frequency</label>
+          <input class="input" id="tr-freq" value="${esc(it.frequency)}" placeholder="e.g. Every 20 min"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>From</label><input class="input" id="tr-from" value="${esc(it.from)}" placeholder="Main Media Centre"></div>
+        <div class="field"><label>To (destination)</label><input class="input" id="tr-to" value="${esc(it.to)}" placeholder="e.g. King Fahd International Stadium"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>First departure</label><input class="input" id="tr-first" value="${esc(it.firstDeparture)}" placeholder="08:00"></div>
+        <div class="field"><label>Last departure</label><input class="input" id="tr-last" value="${esc(it.lastDeparture)}" placeholder="23:30"></div>
+      </div>
+      <div class="field"><label>Duration</label><input class="input" id="tr-duration" value="${esc(it.duration)}" placeholder="~25 min"></div>
+      <div class="field"><label>Notes</label><textarea class="textarea" id="tr-notes" placeholder="Boarding bay, advisories…">${esc(it.notes)}</textarea></div>
+      <div class="editor-actions">
+        <button class="btn btn-ghost btn-sm" id="tr-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="tr-save">${ICONS.check}<span>${item ? 'Save changes' : 'Add route'}</span></button>
+      </div>
+    </div>`;
+  ed.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('tr-cancel').addEventListener('click', () => { ed.innerHTML = ''; });
+  document.getElementById('tr-save').addEventListener('click', () => saveTransport(item ? item.id : null));
+  document.getElementById('tr-to').focus();
+}
+
+async function saveTransport(id) {
+  const payload = {
+    route: val('tr-route').trim(),
+    type: val('tr-type'),
+    from: val('tr-from').trim(),
+    to: val('tr-to').trim(),
+    frequency: val('tr-freq').trim(),
+    firstDeparture: val('tr-first').trim(),
+    lastDeparture: val('tr-last').trim(),
+    duration: val('tr-duration').trim(),
+    notes: val('tr-notes').trim(),
+  };
+  if (!payload.route && !payload.to) { toast('Enter a destination or a route name.', 'error'); return; }
+  try {
+    if (id) await API.put('/transport/' + id, payload, true);
+    else await API.post('/transport', payload, true);
+    document.getElementById('tr-editor').innerHTML = '';
+    toast(id ? 'Route saved.' : 'Route added.', 'success');
+    await loadTransport();
+  } catch (e) { handleAdminErr(e); }
+}
+
+async function deleteTransport(id) {
+  if (!confirm('Delete this shuttle route?')) return;
+  try { await API.del('/transport/' + id, true); toast('Deleted.', 'success'); await loadTransport(); }
   catch (e) { handleAdminErr(e); }
 }
 

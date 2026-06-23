@@ -240,6 +240,21 @@ async function listTransport() {
   return (await models.Transport.find().lean()).map(strip);
 }
 
+async function createTransport(item) {
+  await models.Transport.create(item);
+  return item;
+}
+
+async function updateTransport(id, fields) {
+  const allowed = pick(fields, ['route', 'type', 'from', 'to', 'frequency', 'firstDeparture', 'lastDeparture', 'duration', 'notes']);
+  return strip(await models.Transport.findOneAndUpdate({ id }, { $set: allowed }, { new: true }).lean());
+}
+
+async function deleteTransport(id) {
+  const r = await models.Transport.deleteOne({ id });
+  return r.deletedCount > 0;
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 function pick(obj, keys) {
@@ -277,4 +292,7 @@ module.exports = {
   updatePress,
   deletePress,
   listTransport,
+  createTransport,
+  updateTransport,
+  deleteTransport,
 };

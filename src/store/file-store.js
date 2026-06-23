@@ -241,6 +241,28 @@ async function listTransport() {
   return data.transport.slice();
 }
 
+async function createTransport(item) {
+  data.transport.push(item);
+  persist();
+  return item;
+}
+
+async function updateTransport(id, fields) {
+  const item = data.transport.find((t) => t.id === id);
+  if (!item) return null;
+  Object.assign(item, fields);
+  persist();
+  return item;
+}
+
+async function deleteTransport(id) {
+  const before = data.transport.length;
+  data.transport = data.transport.filter((t) => t.id !== id);
+  if (data.transport.length === before) return false;
+  persist();
+  return true;
+}
+
 module.exports = {
   backend,
   init,
@@ -270,4 +292,7 @@ module.exports = {
   updatePress,
   deletePress,
   listTransport,
+  createTransport,
+  updateTransport,
+  deleteTransport,
 };

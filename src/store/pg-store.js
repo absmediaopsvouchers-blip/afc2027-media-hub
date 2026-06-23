@@ -414,6 +414,42 @@ async function listTransport() {
   return rows.map(toTransport);
 }
 
+async function createTransport(item) {
+  await q(
+    'INSERT INTO transport (id, route, type, "from", "to", frequency, first_departure, last_departure, duration, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+    [item.id, item.route, item.type, item.from, item.to, item.frequency, item.firstDeparture, item.lastDeparture, item.duration, item.notes]
+  );
+  return item;
+}
+
+async function updateTransport(id, fields) {
+  // Maps JS field -> SQL column (quoting reserved words, snake_casing the rest).
+  const colMap = {
+    route: 'route', type: 'type', from: '"from"', to: '"to"', frequency: 'frequency',
+    firstDeparture: 'first_departure', lastDeparture: 'last_departure', duration: 'duration', notes: 'notes',
+  };
+  const sets = [];
+  const vals = [];
+  for (const [f, col] of Object.entries(colMap)) {
+    if (fields[f] !== undefined) {
+      vals.push(fields[f]);
+      sets.push(`${col} = $${vals.length}`);
+    }
+  }
+  if (!sets.length) {
+    const { rows } = await q('SELECT * FROM transport WHERE id = $1', [id]);
+    return rows[0] ? toTransport(rows[0]) : null;
+  }
+  vals.push(id);
+  const { rows } = await q(`UPDATE transport SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING *`, vals);
+  return rows[0] ? toTransport(rows[0]) : null;
+}
+
+async function deleteTransport(id) {
+  const { rowCount } = await q('DELETE FROM transport WHERE id = $1', [id]);
+  return rowCount > 0;
+}
+
 module.exports = {
   backend,
   init,
@@ -443,4 +479,7 @@ module.exports = {
   updatePress,
   deletePress,
   listTransport,
+  createTransport,
+  updateTransport,
+  deleteTransport,
 };

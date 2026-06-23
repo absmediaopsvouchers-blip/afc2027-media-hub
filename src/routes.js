@@ -530,4 +530,52 @@ router.delete('/press-conferences/:id', requireAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---- Transport / shuttle CMS ------------------------------------------------
+
+const TRANSPORT_TYPES = ['Stadium', 'Training'];
+
+router.post('/transport', requireAdmin, wrap(async (req, res) => {
+  const type = TRANSPORT_TYPES.includes(String(req.body.type || '').trim())
+    ? String(req.body.type).trim()
+    : 'Stadium';
+  const to = String(req.body.to || '').trim();
+  const item = {
+    id: uid('TR'),
+    route: String(req.body.route || '').trim() || (to ? `MMC ⇄ ${to}` : 'New shuttle route'),
+    type,
+    from: String(req.body.from || '').trim() || 'Main Media Centre',
+    to,
+    frequency: String(req.body.frequency || '').trim(),
+    firstDeparture: String(req.body.firstDeparture || '').trim(),
+    lastDeparture: String(req.body.lastDeparture || '').trim(),
+    duration: String(req.body.duration || '').trim(),
+    notes: String(req.body.notes || '').trim(),
+  };
+  await store.createTransport(item);
+  res.status(201).json(item);
+}));
+
+router.put('/transport/:id', requireAdmin, wrap(async (req, res) => {
+  const fields = {};
+  for (const f of ['route', 'from', 'to', 'frequency', 'firstDeparture', 'lastDeparture', 'duration', 'notes']) {
+    if (req.body[f] !== undefined) fields[f] = String(req.body[f]).trim();
+  }
+  if (req.body.type !== undefined) {
+    const type = String(req.body.type).trim();
+    if (!TRANSPORT_TYPES.includes(type)) {
+      return res.status(400).json({ error: 'Type must be Stadium or Training.' });
+    }
+    fields.type = type;
+  }
+  const updated = await store.updateTransport(req.params.id, fields);
+  if (!updated) return res.status(404).json({ error: 'Shuttle route not found.' });
+  res.json(updated);
+}));
+
+router.delete('/transport/:id', requireAdmin, wrap(async (req, res) => {
+  const ok = await store.deleteTransport(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Shuttle route not found.' });
+  res.json({ ok: true });
+}));
+
 module.exports = { router, ADMIN_KEY };
