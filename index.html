@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meal Voucher Ops · AFC2027</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<style>
+*{box-sizing:border-box;}
+body{margin:0;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:#c8cfd9;border-radius:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+input,select,button,textarea{font-family:inherit;outline:none;}
+@keyframes mvsIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+@keyframes mvsPulse{0%,100%{opacity:.45;}50%{opacity:1;}}
+</style>
+</head>
+<body>
+<div id="app" style="--accent:#3b6cf0;display:flex;height:100vh;width:100%;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#1c2430;background:#eef1f5;overflow:hidden;"></div>
+
+<script>
+var KEY = 'mvs.db.v3';
+var _stream = null;
+var _scanInterval = null;
+var _det = null;
+var _videoEl = null;
+
+var state = {
+  view: 'dashboard',
+  db: null,
+  now: new Date(),
+  reqVenueId: 'MMC-01', reqStaffId: '', reqMeal: 'Lunch', reqMatchId: '',
+  result: null,
+  scanCode: '', scanResult: null,
+  cameraOn: false, cameraErr: null,
+  nvName: '', nvType: 'MMC',
+  editVenueId: null, eName: '', eType: 'MMC', eWindow: '', eZone: '',
+  editPmIdx: null, pDate: '', pRoom: 'PC Room 1', pTime: '', pFlag: '', pTeam: '', pDetail: '',
+  npDate: '', npRoom: 'PC Room 1', npTime: '', npFlag: '', npTeam: '', npDetail: '',
+  pmInfo: ''
+};
+
+function dateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function localISO(d) {
+  return dateStr(d) + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+}
+function fmtTime(iso) {
+  if (!iso) return '—';
+  var d = new Date(iso);
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function fmtClock(d) {
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+}
+function fmtDateLong(d) {
+  try { return d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
+  catch(e) { return dateStr(d); }
+}
+
+function genCode(existing) {
+  existing = existing || [];
+  var A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', c;
+  do { c=''; for (var i=0;i<8;i++) c += A[Math.floor(Math.random()*A.length)]; }
+  while (existing.some(function(v){ return v.code === c; }));
+  return c;
+}
+function makeQR(text) {
+  if (!window.qrcode) return '';
+  try { var qr = window.qrcode(0,'M'); qr.addData(text); qr.make(); return qr.createDataURL(5,8); }
+  catch(e) { return ''; }
+}
+
+function getPMPC() {
+  return [
+    {date:'11 Jan',room:'PC Room 1',time:'11:00',flag:'🇶🇦',team:'Qatar',detail:'Head Coach & Team Captain — Pre-tournament opening briefing and strategy assessment.'},
+    {date:'11 Jan',room:'PC Room 1',time:'11:30',flag:'🇱🇧',team:'Lebanon',detail:'Head Coach & Starting Goalkeeper — Opening match preview, team health update and Q&A.'},
+    {date:'12 Jan',room:'PC Room 2',time:'11:00',flag:'🇨🇳',team:'China',detail:'Team Manager & Designated Player — Group stage preparation and tactical media brief.'},
+    {date:'12 Jan',room:'PC Room 2',time:'11:30',flag:'🇹🇯',team:'Tajikistan',detail:'Head Coach & National Press Officer — Squad announcements and structural overview.'},
+    {date:'12 Jan',room:'PC Room 1',time:'11:00',flag:'🇺🇿',team:'Uzbekistan',detail:'Head Coach & Squad Representative — Pre-match briefing, starting strategy indicators.'},
+    {date:'12 Jan',room:'PC Room 1',time:'11:30',flag:'🇸🇾',team:'Syria',detail:'Technical Director & Team Captain — Logistics update and squad expectations.'},
+    {date:'12 Jan',room:'PC Room 1',time:'12:00',flag:'🇦🇺',team:'Australia',detail:'Head Coach & Selected Forward — Matchday-1 official panel and operational overview.'},
+    {date:'12 Jan',room:'PC Room 1',time:'12:30',flag:'🇮🇳',team:'India',detail:'Head Coach & Key Midfielder — Group phase declarations and milestones discussion.'},
+    {date:'13 Jan',room:'PC Room 1',time:'12:00',flag:'🇻🇳',team:'Vietnam',detail:'Head Coach & Starting XI Representative — Matchday preview and strategy parameters.'},
+    {date:'13 Jan',room:'PC Room 1',time:'12:30',flag:'🇯🇵',team:'Japan',detail:'Head Coach & Team Captain — Official pre-match briefing with international media Q&A.'},
+    {date:'13 Jan',room:'PC Room 2',time:'11:00',flag:'🇦🇪',team:'UAE',detail:'Head Coach & Media Representative — Team formation statements and logistical status.'},
+    {date:'13 Jan',room:'PC Room 2',time:'11:30',flag:'🇭🇰',team:'Hong Kong',detail:'Team Manager & Selected Defender — Pre-match structural highlights and squad briefing.'},
+    {date:'13 Jan',room:'PC Room 2',time:'12:00',flag:'🇮🇷',team:'Iran',detail:'Head Coach & Star Striker — Group stage overview, conditioning report and targets.'},
+    {date:'13 Jan',room:'PC Room 2',time:'12:30',flag:'🇵🇸',team:'Palestine',detail:'Head Coach & Player Panel — Official media schedule and group objectives.'},
+    {date:'14 Jan',room:'PC Room 2',time:'11:00',flag:'🇮🇩',team:'Indonesia',detail:'Technical Staff & Team Captain — Tactical framework run-through and conditioning review.'},
+    {date:'14 Jan',room:'PC Room 2',time:'11:30',flag:'🇮🇶',team:'Iraq',detail:'Head Coach & Media Officer — Match strategy declarations and panel discussion.'},
+    {date:'14 Jan',room:'PC Room 1',time:'11:00',flag:'🇲🇾',team:'Malaysia',detail:'Head Coach & Starting Player — Pre-match briefing on operational expectations and goals.'},
+    {date:'14 Jan',room:'PC Room 1',time:'11:30',flag:'🇯🇴',team:'Jordan',detail:'Squad Representative & Manager — Tactical adjustments overview ahead of the tie.'},
+    {date:'14 Jan',room:'PC Room 1',time:'12:00',flag:'🇰🇷',team:'South Korea',detail:'Head Coach & Designated Attacker — Match evaluation and physical recovery notes.'},
+    {date:'14 Jan',room:'PC Room 1',time:'12:30',flag:'🇧🇭',team:'Bahrain',detail:'Head Coach & Team Representative — Pre-match analytics wrap-up and tactical overview.'},
+    {date:'15 Jan',room:'PC Room 1',time:'11:00',flag:'🇹🇭',team:'Thailand',detail:'Head Coach & Starting Goalkeeper — Match preparation updates and defensive strategy.'},
+    {date:'15 Jan',room:'PC Room 1',time:'11:30',flag:'🇰🇬',team:'Kyrgyzstan',detail:'Technical Management Staff — Squad evaluation, availability report and expectations.'},
+    {date:'15 Jan',room:'PC Room 1',time:'12:00',flag:'🇸🇦',team:'Saudi Arabia',detail:'Head Coach & Team Captain — Official debut briefing and strategic roadmap panel.'},
+    {date:'15 Jan',room:'PC Room 1',time:'12:30',flag:'🇴🇲',team:'Oman',detail:'Head Coach & Starting Defender — Matchday-1 tactical insights and final squad remarks.'}
+  ];
+}
+
+function seed() {
+  var venues = [
+    {id:'MMC-01',name:'Main Media Centre',type:'MMC',window:'08:00 – 23:00',zone:'Central Hub'},
+    {id:'STD-01',name:'North Stadium',type:'Stadium',window:'Match windows',zone:'North District'},
+    {id:'STD-02',name:'Harbour Arena',type:'Stadium',window:'Match windows',zone:'Harbour'},
+    {id:'SAT-01',name:'Satellite Media Site',type:'MMC',window:'08:00 – 22:00',zone:'East Annex'}
+  ];
+  var staff = [
+    {id:'S-10293',name:'Maria Chen',role:'Press',org:'Global Wire'},
+    {id:'S-10485',name:'David Okoye',role:'Broadcast',org:'Intl Broadcast'},
+    {id:'S-11002',name:'Sofia Rossi',role:'Catering Liaison',org:'Host Ops'},
+    {id:'S-11874',name:'Liam Murphy',role:'Operations',org:'Host Ops'},
+    {id:'S-12056',name:'Aiko Tanaka',role:'Media',org:'Press Pool'},
+    {id:'S-12390',name:'Omar Haddad',role:'Photographer',org:'Photo Pool'}
+  ];
+  var d = dateStr(new Date());
+  var dd = d.replace(/-/g,'');
+  var matches = [
+    {id:'M-'+dd+'-12',venueId:'STD-01',name:'Group A · Match 12',time:'18:00'},
+    {id:'M-'+dd+'-13',venueId:'STD-02',name:'Group B · Match 13',time:'20:30'}
+  ];
+  var weights = {8:1,9:2,10:3,11:5,12:9,13:7,14:3,15:2,16:3,17:5,18:7,19:9,20:8,21:4,22:1};
+  var vouchers = [];
+  Object.keys(weights).forEach(function(h) {
+    for (var i=0;i<weights[h];i++) {
+      var v = venues[Math.floor(Math.random()*venues.length)];
+      var isMMC = v.type === 'MMC';
+      var match = isMMC ? null : matches.filter(function(m){ return m.venueId===v.id; })[0];
+      if (!isMMC && !match) continue;
+      var meal = isMMC ? (Number(h)<16?'Lunch':'Dinner') : 'Match Meal';
+      var mm = String(Math.floor(Math.random()*60)).padStart(2,'0');
+      var issuedAt = d + 'T' + String(h).padStart(2,'0') + ':' + mm + ':00';
+      var redeemed = Math.random() < 0.79;
+      var redeemedAt = null;
+      if (redeemed) {
+        var add = 5 + Math.floor(Math.random()*38);
+        var rd = new Date(issuedAt);
+        rd.setMinutes(rd.getMinutes()+add);
+        redeemedAt = localISO(rd);
+      }
+      vouchers.push({code:genCode(vouchers),staffId:'S-'+(20000+Math.floor(Math.random()*9000)),venueId:v.id,type:v.type,meal:meal,matchId:match?match.id:null,issuedAt:issuedAt,redeemed:redeemed,redeemedAt:redeemedAt});
+    }
+  });
+  vouchers.push({code:genCode(vouchers),staffId:'S-10293',venueId:'MMC-01',type:'MMC',meal:'Lunch',matchId:null,issuedAt:d+'T11:18:00',redeemed:true,redeemedAt:d+'T11:46:00'});
+  var sampleCodes = [genCode(vouchers),genCode(vouchers),genCode(vouchers),genCode(vouchers),genCode(vouchers)];
+  var notifications = [
+    {id:'N0',type:'issued',staffId:'S-11002',staffName:'Sofia Rossi',venueName:'Main Media Centre',meal:'Dinner',code:sampleCodes[0],time:d+'T19:12:00'},
+    {id:'N1',type:'issued',staffId:'S-10485',staffName:'David Okoye',venueName:'North Stadium',meal:'Match Meal',code:sampleCodes[1],time:d+'T17:48:00'},
+    {id:'N2',type:'denied',staffId:'S-99001',staffName:'Unidentified',venueName:'Harbour Arena',meal:'Match Meal',reason:'Accreditation ID not found on the approved staff list.',time:d+'T17:40:00'},
+    {id:'N3',type:'issued',staffId:'S-10293',staffName:'Maria Chen',venueName:'Main Media Centre',meal:'Lunch',code:sampleCodes[2],time:d+'T11:18:00'},
+    {id:'N4',type:'issued',staffId:'S-12056',staffName:'Aiko Tanaka',venueName:'Satellite Media Site',meal:'Lunch',code:sampleCodes[3],time:d+'T12:31:00'}
+  ];
+  return {venues:venues,staff:staff,matches:matches,vouchers:vouchers,notifications:notifications};
+}
+
+function loadDB() {
+  var db = null;
+  try { db = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
+  if (!db || !db.venues) { db = seed(); }
+  var changed = false;
+  if (!db.pmpc) { db.pmpc = getPMPC(); changed = true; }
+  if (db.pmpcInfo == null) { db.pmpcInfo = 'Informational schedule of Pre-Match Press Conferences (PMPC). All sessions are held at the Main Media Centre, PC Rooms 1 & 2. Media clients should plan meal windows around their briefings.'; changed = true; }
+  if (changed) { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch(e) {} }
+  return db;
+}
+function saveDB(db) {
+  state.db = db;
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch(e) {}
+}
+function sameDay(iso) {
+  return !!iso && iso.slice(0,10) === dateStr(state.now || new Date());
+}
+
+// ---- ACTIONS ----
+function doRequest() {
+  var db = state.db;
+  var venue = db.venues.filter(function(v){ return v.id===state.reqVenueId; })[0];
+  var id = (state.reqStaffId||'').trim().toUpperCase();
+  var staff = db.staff.filter(function(x){ return x.id===id; })[0];
+
+  function deny(reason) {
+    var note = {id:'N'+Date.now(),type:'denied',staffId:id||'—',staffName:staff?staff.name:'Unidentified',venueName:venue.name,meal:venue.type==='MMC'?state.reqMeal:'Match Meal',reason:reason,time:localISO(new Date())};
+    saveDB(Object.assign({},db,{notifications:[note].concat(db.notifications)}));
+    state.result = {status:'denied',reason:reason,staff:staff||{id:id||'—',name:'Unidentified'},venue:venue};
+    render();
+  }
+
+  if (!id) { deny('Enter a staff accreditation ID to continue.'); return; }
+  if (!staff) { deny('Accreditation ID '+id+' is not on the approved staff list for this event.'); return; }
+
+  if (venue.type==='MMC') {
+    var ex = db.vouchers.filter(function(v){ return v.staffId===staff.id && v.venueId===venue.id && v.meal===state.reqMeal && sameDay(v.issuedAt); })[0];
+    if (ex) { deny(state.reqMeal+' voucher already issued to '+staff.name+' today — daily allowance reached.'); return; }
+  } else {
+    var match0 = db.matches.filter(function(m){ return m.id===state.reqMatchId; })[0];
+    var ex2 = db.vouchers.filter(function(v){ return v.staffId===staff.id && v.matchId===state.reqMatchId; })[0];
+    if (ex2) { deny('Match meal voucher already issued to '+staff.name+' for '+(match0?match0.name:'this match')+'.'); return; }
+  }
+
+  var match = venue.type==='Stadium' ? db.matches.filter(function(m){ return m.id===state.reqMatchId; })[0] : null;
+  var code = genCode(db.vouchers);
+  var iso = localISO(new Date());
+  var voucher = {code:code,staffId:staff.id,venueId:venue.id,type:venue.type,meal:venue.type==='MMC'?state.reqMeal:'Match Meal',matchId:match?match.id:null,issuedAt:iso,redeemed:false,redeemedAt:null};
+  var note = {id:'N'+Date.now(),type:'issued',staffId:staff.id,staffName:staff.name,venueName:venue.name,meal:voucher.meal,code:code,time:iso};
+  saveDB(Object.assign({},db,{vouchers:[voucher].concat(db.vouchers),notifications:[note].concat(db.notifications)}));
+  var qr = makeQR(code);
+  var mealLabel = venue.type==='MMC' ? state.reqMeal : ('Match Meal · '+(match?match.name:''));
+  state.result = {status:'issued',voucher:voucher,qr:qr,staff:staff,venue:venue,mealLabel:mealLabel,timeStr:fmtTime(iso)};
+  render();
+  // Set QR after render
+  var qrImg = document.getElementById('qr-img');
+  if (qrImg && qr) qrImg.src = qr;
+}
+
+function doRedeem(codeArg) {
+  var db = state.db;
+  var code = (codeArg || state.scanCode || '').trim().toUpperCase();
+  if (!code) { state.scanResult = {status:'invalid',msg:'Enter or scan a voucher code.'}; render(); return; }
+  var v = db.vouchers.filter(function(x){ return x.code===code; })[0];
+  if (!v) { state.scanResult = {status:'invalid',msg:'Code '+code+' is not recognised — no matching voucher.'}; render(); return; }
+  var staff = db.staff.filter(function(x){ return x.id===v.staffId; })[0];
+  var venue = db.venues.filter(function(x){ return x.id===v.venueId; })[0];
+  var who = staff ? staff.name : v.staffId;
+  if (v.redeemed) { state.scanResult = {status:'used',voucher:v,who:who,venueName:venue?venue.name:'',msg:'Already redeemed at '+fmtTime(v.redeemedAt)+'.'}; render(); return; }
+  var iso = localISO(new Date());
+  var nv = db.vouchers.map(function(x){ return x.code===code ? Object.assign({},x,{redeemed:true,redeemedAt:iso}) : x; });
+  saveDB(Object.assign({},db,{vouchers:nv}));
+  state.scanResult = {status:'ok',voucher:Object.assign({},v,{redeemedAt:iso}),who:who,venueName:venue?venue.name:'',timeStr:fmtTime(iso)};
+  state.scanCode = '';
+  render();
+}
+
+function doAddVenue() {
+  var name = (state.nvName||'').trim();
+  if (!name) return;
+  var db = state.db;
+  var pre = state.nvType==='MMC' ? 'MMC' : 'STD';
+  var n = db.venues.filter(function(v){ return v.type===state.nvType; }).length + 1;
+  var id = pre + '-' + String(n+10).padStart(2,'0');
+  var venue = {id:id,name:name,type:state.nvType,window:state.nvType==='MMC'?'08:00 – 23:00':'Match windows',zone:'New Site'};
+  saveDB(Object.assign({},db,{venues:db.venues.concat([venue])}));
+  state.nvName = '';
+  render();
+}
+
+function doRemoveVenue(id) {
+  var db = state.db;
+  saveDB(Object.assign({},db,{venues:db.venues.filter(function(v){ return v.id!==id; }),matches:db.matches.filter(function(m){ return m.venueId!==id; })}));
+  if (state.editVenueId===id) state.editVenueId = null;
+  render();
+}
+
+function doSaveVenue() {
+  var db = state.db;
+  if (!state.editVenueId) return;
+  var venues = db.venues.map(function(v){ return v.id===state.editVenueId ? Object.assign({},v,{name:(state.eName||'').trim()||v.name,type:state.eType,window:(state.eWindow||'').trim()||v.window,zone:(state.eZone||'').trim()||v.zone}) : v; });
+  saveDB(Object.assign({},db,{venues:venues}));
+  state.editVenueId = null;
+  render();
+}
+
+function doSavePm() {
+  var db = state.db;
+  if (state.editPmIdx==null) return;
+  var pmpc = db.pmpc.map(function(r,i){ return i===state.editPmIdx ? {date:state.pDate,room:state.pRoom,time:state.pTime,flag:state.pFlag,team:state.pTeam,detail:state.pDetail} : r; });
+  saveDB(Object.assign({},db,{pmpc:pmpc}));
+  state.editPmIdx = null;
+  render();
+}
+
+function doRemovePm(i) {
+  var db = state.db;
+  var ep = state.editPmIdx;
+  var pmpc = db.pmpc.filter(function(r,idx){ return idx!==i; });
+  saveDB(Object.assign({},db,{pmpc:pmpc}));
+  if (ep===i) state.editPmIdx = null;
+  else if (ep!=null && ep>i) state.editPmIdx = ep-1;
+  render();
+}
+
+function doAddPm() {
+  if (!(state.npTeam||'').trim()) return;
+  var db = state.db;
+  var row = {date:(state.npDate||'').trim()||'TBC',room:state.npRoom,time:(state.npTime||'').trim()||'TBC',flag:(state.npFlag||'').trim(),team:(state.npTeam||'').trim(),detail:(state.npDetail||'').trim()};
+  saveDB(Object.assign({},db,{pmpc:db.pmpc.concat([row])}));
+  state.npDate=''; state.npTime=''; state.npFlag=''; state.npTeam=''; state.npDetail='';
+  render();
+}
+
+function doSavePmInfo() {
+  var db = state.db;
+  saveDB(Object.assign({},db,{pmpcInfo:state.pmInfo}));
+}
+
+function doReset() {
+  try { localStorage.removeItem(KEY); } catch(e) {}
+  var db = seed();
+  db.pmpc = getPMPC();
+  db.pmpcInfo = 'Informational schedule of Pre-Match Press Conferences (PMPC). All sessions are held at the Main Media Centre, PC Rooms 1 & 2. Media clients should plan meal windows around their briefings.';
+  saveDB(db);
+  state.result = null; state.scanResult = null; state.view = 'dashboard';
+  state.editVenueId = null; state.editPmIdx = null; state.reqStaffId = ''; state.nvName = '';
+  render();
+}
+
+function handleVenueChange(id) {
+  var db = state.db;
+  var v = db.venues.filter(function(x){ return x.id===id; })[0];
+  state.reqVenueId = id; state.result = null;
+  if (v.type==='MMC') { state.reqMeal='Lunch'; state.reqMatchId=''; }
+  else { var m = db.matches.filter(function(mm){ return mm.venueId===id; })[0]; state.reqMeal='Match Meal'; state.reqMatchId=m?m.id:''; }
+  render();
+}
+
+async function startCamera() {
+  state.cameraOn = true; state.cameraErr = null; state.scanResult = null;
+  render();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    state.cameraOn = false; state.cameraErr = 'Camera API unavailable in this browser — use manual key-in below.'; render(); return;
+  }
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    _stream = stream;
+    _videoEl = document.getElementById('cam-video');
+    if (_videoEl) { _videoEl.srcObject = stream; _videoEl.play().catch(function(){}); }
+    if ('BarcodeDetector' in window) {
+      try { _det = new window.BarcodeDetector({formats:['qr_code']}); } catch(e) { _det = new window.BarcodeDetector(); }
+      _scanInterval = setInterval(async function(){
+        if (!_videoEl || !_det) return;
+        try {
+          var codes = await _det.detect(_videoEl);
+          if (codes && codes.length) { var raw = codes[0].rawValue; stopCamera(); doRedeem(raw); }
+        } catch(e) {}
+      }, 450);
+    } else {
+      state.cameraErr = 'Live auto-detection isn’t supported in this browser — the camera is on; use manual key-in, or open in Chrome/Edge for auto-scan.';
+      render();
+    }
+  } catch(e) {
+    state.cameraOn = false; state.cameraErr = 'Camera access was denied or is unavailable — use manual key-in below.'; render();
+  }
+}
+
+function stopCamera() {
+  clearInterval(_scanInterval); _scanInterval = null;
+  if (_stream) { _stream.getTracks().forEach(function(t){ t.stop(); }); _stream = null; }
+  if (_videoEl) { _videoEl.srcObject = null; _videoEl = null; }
+  state.cameraOn = false;
+  render();
+}
+
+function setView(v) {
+  if (state.cameraOn) stopCamera();
+  state.view = v;
+  render();
+}
+
+// ---- RENDER ----
+function typeStyle(type) {
+  return "font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;font-family:'IBM Plex Mono',monospace;" +
+    (type==='MMC' ? 'background:color-mix(in srgb,var(--accent) 13%,#fff);color:var(--accent);' : 'background:#fbeede;color:#b3701b;');
+}
+
+function card(content, extra) {
+  return '<div style="background:#fff;border:1px solid #e4e8ee;border-radius:12px;box-shadow:0 1px 2px rgba(20,30,50,.04);' + (extra||'') + '">' + content + '</div>';
+}
+
+function renderDashboard() {
+  var db = state.db;
+  var today = dateStr(state.now);
+  var todays = db.vouchers.filter(function(v){ return v.issuedAt.slice(0,10)===today; });
+  var issued = todays.length;
+  var redeemed = todays.filter(function(v){ return v.redeemed; }).length;
+  var outstanding = issued - redeemed;
+  var rate = issued ? Math.round(redeemed/issued*100) : 0;
+  var rateStr = rate + '%';
+  var activeVenues = db.venues.filter(function(vn){ return todays.some(function(v){ return v.venueId===vn.id; }); }).length;
+
+  var byHour = {}; for (var h=8; h<=22; h++) byHour[h]=0;
+  todays.forEach(function(v){ var hh=new Date(v.issuedAt).getHours(); if (byHour[hh]!=null) byHour[hh]++; });
+  var maxH = Math.max.apply(null,[1].concat(Object.keys(byHour).map(function(k){ return byHour[k]; })));
+  var pk = Object.keys(byHour).reduce(function(a,b){ return byHour[b]>byHour[a]?b:a; },'12');
+
+  var bars = Object.keys(byHour).map(function(k){
+    var pct = Math.round(byHour[k]/maxH*100);
+    return '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:7px;">' +
+      '<div style="width:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;">' +
+      '<div style="width:100%;min-height:3px;border-radius:4px 4px 0 0;height:'+pct+'%;background:var(--accent);"></div></div>' +
+      '<span style="font-size:9px;color:#8893a3;font-family:\'IBM Plex Mono\',monospace;">'+String(k).padStart(2,'0')+'</span></div>';
+  }).join('');
+
+  var donutStyle = 'background:conic-gradient(var(--accent) '+rate+'%, #e7ebf1 0)';
+
+  var venueRows = db.venues.map(function(vn){
+    var vv = todays.filter(function(v){ return v.venueId===vn.id; });
+    var rr = vv.filter(function(v){ return v.redeemed; }).length;
+    var bh = {}; vv.forEach(function(v){ var hh=new Date(v.issuedAt).getHours(); bh[hh]=(bh[hh]||0)+1; });
+    var pkk = Object.keys(bh).reduce(function(a,b){ return bh[b]>(bh[a]||0)?b:a; },null);
+    var vr = vv.length ? Math.round(rr/vv.length*100) : 0;
+    return '<div style="display:grid;grid-template-columns:2.4fr 1fr .8fr .9fr 1.5fr .9fr;gap:12px;align-items:center;padding:13px 4px;border-bottom:1px solid #f4f6f9;">' +
+      '<div style="display:flex;flex-direction:column;"><span style="font-weight:600;font-size:13px;">'+vn.name+'</span><span style="font-size:10.5px;color:#9aa4b2;font-family:\'IBM Plex Mono\',monospace;">'+vn.id+'</span></div>' +
+      '<div><span style="'+typeStyle(vn.type)+'">'+vn.type+'</span></div>' +
+      '<span style="font-weight:600;font-size:13px;">'+vv.length+'</span>' +
+      '<span style="font-weight:600;font-size:13px;">'+rr+'</span>' +
+      '<div style="display:flex;align-items:center;gap:9px;"><div style="flex:1;height:6px;background:#eef1f5;border-radius:4px;overflow:hidden;"><div style="height:100%;border-radius:4px;width:'+vr+'%;background:var(--accent);"></div></div><span style="font-size:11.5px;font-weight:600;color:#516074;width:34px;">'+(vv.length?vr+'%':'—')+'</span></div>' +
+      '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:12px;color:#516074;">'+(pkk!=null?String(pkk).padStart(2,'0')+':00':'—')+'</span>' +
+      '</div>';
+  }).join('');
+
+  var statCards = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">' +
+    card('<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#8893a3;">Vouchers Issued</div><div style="font-size:32px;font-weight:700;margin-top:8px;line-height:1;">'+issued+'</div><div style="font-size:11.5px;color:#8893a3;margin-top:7px;">today · all venues</div>','padding:18px;') +
+    card('<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#8893a3;">Redeemed</div><div style="font-size:32px;font-weight:700;margin-top:8px;line-height:1;">'+redeemed+'</div><div style="font-size:11.5px;color:#8893a3;margin-top:7px;">'+outstanding+' outstanding</div>','padding:18px;') +
+    card('<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#8893a3;">Redemption Rate</div><div style="font-size:32px;font-weight:700;margin-top:8px;line-height:1;color:var(--accent);">'+rateStr+'</div><div style="font-size:11.5px;color:#8893a3;margin-top:7px;">catering-waste control</div>','padding:18px;') +
+    card('<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#8893a3;">Active Venues</div><div style="font-size:32px;font-weight:700;margin-top:8px;line-height:1;">'+activeVenues+'</div><div style="font-size:11.5px;color:#8893a3;margin-top:7px;">of '+db.venues.length+' nodes</div>','padding:18px;') +
+    '</div>';
+
+  var charts = '<div style="display:grid;grid-template-columns:1.7fr 1fr;gap:16px;">' +
+    card('<div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:13.5px;font-weight:600;">Issuance by Hour</span><span style="font-size:11px;font-weight:600;color:var(--accent);font-family:\'IBM Plex Mono\',monospace;">Peak '+String(pk).padStart(2,'0')+':00</span></div><div style="display:flex;align-items:stretch;gap:6px;height:170px;margin-top:20px;">'+bars+'</div>','padding:20px;min-width:0;') +
+    card('<div style="font-size:13.5px;font-weight:600;">Redemption vs Issuance</div><div style="display:flex;align-items:center;gap:22px;margin-top:18px;"><div style="width:118px;height:118px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;'+donutStyle+'"><div style="width:82px;height:82px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;"><span style="font-size:23px;font-weight:700;">'+rateStr+'</span><span style="font-size:9px;color:#8893a3;letter-spacing:.1em;text-transform:uppercase;font-family:\'IBM Plex Mono\',monospace;">redeemed</span></div></div><div style="flex:1;display:flex;flex-direction:column;gap:13px;"><div style="display:flex;align-items:center;gap:9px;"><span style="width:11px;height:11px;border-radius:3px;background:var(--accent);"></span><span style="font-size:12.5px;color:#516074;flex:1;">Redeemed</span><span style="font-weight:600;font-size:13px;">'+redeemed+'</span></div><div style="display:flex;align-items:center;gap:9px;"><span style="width:11px;height:11px;border-radius:3px;background:#e0e5ec;"></span><span style="font-size:12.5px;color:#516074;flex:1;">Outstanding</span><span style="font-weight:600;font-size:13px;">'+outstanding+'</span></div><div style="border-top:1px dashed #e4e8ee;padding-top:13px;display:flex;align-items:center;gap:9px;"><span style="font-size:12.5px;color:#516074;flex:1;">Total issued</span><span style="font-weight:700;font-size:13px;">'+issued+'</span></div></div></div>','padding:20px;display:flex;flex-direction:column;') +
+    '</div>';
+
+  var venueTable = card(
+    '<span style="font-size:13.5px;font-weight:600;">Per-Venue Performance</span>' +
+    '<div style="display:grid;grid-template-columns:2.4fr 1fr .8fr .9fr 1.5fr .9fr;gap:12px;margin-top:16px;padding:0 4px 10px;border-bottom:1px solid #eef1f5;font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9aa4b2;"><span>Venue</span><span>Protocol</span><span>Issued</span><span>Redeemed</span><span>Redemption</span><span>Peak</span></div>' +
+    venueRows,
+    'padding:20px;'
+  );
+
+  return '<div style="animation:mvsIn .25s ease;display:flex;flex-direction:column;gap:16px;">'+statCards+charts+venueTable+'</div>';
+}
+
+function renderRequest() {
+  var db = state.db;
+  var reqVenue = db.venues.filter(function(v){ return v.id===state.reqVenueId; })[0] || db.venues[0];
+  var isMMC = reqVenue.type==='MMC';
+
+  var venueOpts = db.venues.map(function(v){
+    return '<option value="'+v.id+'"'+(v.id===state.reqVenueId?' selected':'')+'>'+v.name+' · '+v.type+'</option>';
+  }).join('');
+
+  var staffChips = db.staff.map(function(st){
+    return '<button onclick="state.reqStaffId=\''+st.id+'\';state.result=null;render();" style="padding:6px 10px;border:1px solid #d8dee6;background:#fff;border-radius:7px;font-size:11px;color:#516074;cursor:pointer;">'+st.name+'</button>';
+  }).join('');
+
+  var seg = function(on){ return 'flex:1;padding:11px;border-radius:9px;border:1px solid '+(on?'transparent':'#d4dae3')+';cursor:pointer;font-weight:600;font-size:13px;font-family:inherit;background:'+(on?'var(--accent)':'#fff')+';color:'+(on?'#fff':'#516074')+';'; };
+
+  var mealOrMatch = isMMC ?
+    '<div><label style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#8893a3;">Meal · 2 per day allowance</label><div style="display:flex;gap:10px;margin-top:7px;"><button onclick="state.reqMeal=\'Lunch\';state.result=null;render();" style="'+seg(state.reqMeal==='Lunch')+'">Lunch</button><button onclick="state.reqMeal=\'Dinner\';state.result=null;render();" style="'+seg(state.reqMeal==='Dinner')+'">Dinner</button></div></div>' :
+    (function(){
+      var venueMatches = db.matches.filter(function(m){ return m.venueId===reqVenue.id; });
+      var matchOpts = venueMatches.map(function(m){ return '<option value="'+m.id+'"'+(m.id===state.reqMatchId?' selected':'')+'>'+m.name+' · '+m.time+'</option>'; }).join('');
+      return '<div><label style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#8893a3;">Match · 1 meal per event</label><select onchange="state.reqMatchId=this.value;state.result=null;render();" style="width:100%;margin-top:7px;padding:11px 12px;border:1px solid #d4dae3;border-radius:9px;font-size:13.5px;background:#fff;color:#1c2430;cursor:pointer;">'+matchOpts+'</select></div>';
+    })();
+
+  var formCard = card(
+    '<span style="font-size:14px;font-weight:600;">Voucher Request</span>' +
+    '<div style="margin-top:20px;display:flex;flex-direction:column;gap:18px;">' +
+    '<div><label style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#8893a3;">Venue</label><select onchange="handleVenueChange(this.value);" style="width:100%;margin-top:7px;padding:11px 12px;border:1px solid #d4dae3;border-radius:9px;font-size:13.5px;background:#fff;color:#1c2430;cursor:pointer;">'+venueOpts+'</select></div>' +
+    '<div><label style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#8893a3;">Staff Accreditation ID</label><input id="staff-id-input" value="'+escHtml(state.reqStaffId)+'" oninput="state.reqStaffId=this.value;state.result=null;" placeholder="e.g. S-10293" style="width:100%;margin-top:7px;padding:11px 12px;border:1px solid #d4dae3;border-radius:9px;font-size:14px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.04em;"><div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;">'+staffChips+'</div></div>' +
+    mealOrMatch +
+    '<button onclick="doRequest();" style="width:100%;margin-top:4px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Run Eligibility &amp; Issue Voucher</button>' +
+    '<div style="font-size:11.5px;color:#9aa4b2;line-height:1.5;">The system verifies the accreditation list and per-protocol limit before generating a non-sequential code. Try requesting <b style="color:#516074;">Lunch</b> for Maria Chen (S-10293) to see a denial — already issued today.</div>' +
+    '</div>',
+    'padding:24px;'
+  );
+
+  var resultCard = '';
+  if (state.result && state.result.status==='issued') {
+    var r = state.result;
+    resultCard = card(
+      '<div style="background:color-mix(in srgb,#1f9d6b 11%,#fff);border-bottom:1px solid #d6ecdf;padding:15px 20px;display:flex;align-items:center;gap:11px;"><span style="width:30px;height:30px;border-radius:50%;background:#1f9d6b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;">&#10003;</span><div><div style="font-weight:600;color:#137a52;font-size:14px;">Voucher Issued</div><div style="font-size:11.5px;color:#5a9c80;">Emailed to '+escHtml(r.staff.name)+'</div></div></div>' +
+      '<div style="padding:22px 20px;display:flex;gap:20px;align-items:center;"><img id="qr-img" alt="Voucher QR" style="width:118px;height:118px;border-radius:8px;border:1px solid #e4e8ee;image-rendering:pixelated;flex:none;background:#fff;"><div style="flex:1;min-width:0;"><div style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#8893a3;">Voucher Code</div><div style="font-family:\'IBM Plex Mono\',monospace;font-size:25px;font-weight:600;letter-spacing:.07em;margin:5px 0 4px;">'+escHtml(r.voucher.code)+'</div></div></div>' +
+      '<div style="padding:0 20px 18px;display:flex;flex-direction:column;gap:10px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;"><span style="color:#8893a3;">Staff</span><span style="font-weight:500;">'+escHtml(r.staff.name)+' · '+escHtml(r.staff.id)+'</span></div><div style="display:flex;justify-content:space-between;font-size:12.5px;"><span style="color:#8893a3;">Venue</span><span style="font-weight:500;">'+escHtml(r.venue.name)+'</span></div><div style="display:flex;justify-content:space-between;font-size:12.5px;"><span style="color:#8893a3;">Entitlement</span><span style="font-weight:500;">'+escHtml(r.mealLabel)+'</span></div><div style="display:flex;justify-content:space-between;font-size:12.5px;"><span style="color:#8893a3;">Issued</span><span style="font-weight:500;font-family:\'IBM Plex Mono\',monospace;">'+escHtml(r.timeStr)+'</span></div></div>' +
+      '<div style="border-top:1px solid #eef1f5;padding:14px 20px;"><button onclick="state.result=null;render();" style="width:100%;padding:11px;border:1px solid #d4dae3;border-radius:9px;background:#fff;font-weight:600;font-size:13px;color:#516074;cursor:pointer;">Issue Another</button></div>',
+      'overflow:hidden;'
+    );
+  } else if (state.result && state.result.status==='denied') {
+    var r = state.result;
+    resultCard = card(
+      '<div style="background:#fdeceb;border-bottom:1px solid #f6d4d1;padding:15px 20px;display:flex;align-items:center;gap:11px;"><span style="width:30px;height:30px;border-radius:50%;background:#c0392b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;">&#10005;</span><div><div style="font-weight:600;color:#a82e21;font-size:14px;">Request Denied</div><div style="font-size:11.5px;color:#c06b62;">Standardised denial notification sent</div></div></div>' +
+      '<div style="padding:20px;"><div style="font-size:13.5px;color:#3c4757;line-height:1.55;">'+escHtml(r.reason)+'</div><div style="margin-top:16px;display:flex;flex-direction:column;gap:9px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;"><span style="color:#8893a3;">Staff</span><span style="font-weight:500;">'+escHtml(r.staff.name)+' · '+escHtml(r.staff.id)+'</span></div><div style="display:flex;justify-content:space-between;font-size:12.5px;"><span style="color:#8893a3;">Venue</span><span style="font-weight:500;">'+escHtml(r.venue.name)+'</span></div></div></div>' +
+      '<div style="border-top:1px solid #eef1f5;padding:14px 20px;"><button onclick="state.result=null;render();" style="width:100%;padding:11px;border:1px solid #d4dae3;border-radius:9px;background:#fff;font-weight:600;font-size:13px;color:#516074;cursor:pointer;">Try Again</button></div>',
+      'overflow:hidden;'
+    );
+  } else {
+    resultCard = card(
+      '<div style="padding:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:340px;"><div style="width:118px;height:118px;border-radius:12px;background:repeating-linear-gradient(45deg,#eef1f5,#eef1f5 8px,#e4e8ee 8px,#e4e8ee 16px);margin-bottom:18px;"></div><div style="font-weight:600;color:#516074;">No voucher yet</div><div style="font-size:12.5px;color:#9aa4b2;margin-top:6px;max-width:250px;line-height:1.5;">Complete the request. The QR code and 8-character voucher identifier appear here once issued.</div></div>',
+      ''
+    );
+  }
+
+  return '<div style="animation:mvsIn .25s ease;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;max-width:1040px;">'+formCard+'<div>'+resultCard+'</div></div>';
+}
+
+function renderScan() {
+  var db = state.db;
+  var scanChips = db.vouchers.filter(function(v){ return !v.redeemed; }).slice(0,8).map(function(v){
+    return '<button onclick="state.scanCode=\''+v.code+'\';state.scanResult=null;render();" style="padding:6px 10px;border:1px solid #d8dee6;background:#fff;border-radius:7px;font-size:11.5px;color:#516074;cursor:pointer;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em;">'+v.code+'</button>';
+  }).join('');
+
+  var camSection = '';
+  if (state.cameraOn) {
+    camSection = '<div style="position:relative;border-radius:10px;overflow:hidden;background:#0e1626;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;"><video id="cam-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video><div style="position:absolute;width:150px;height:150px;border:3px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 1000px rgba(14,22,38,.34);"></div></div><button onclick="stopCamera();" style="width:100%;margin-top:10px;padding:11px;border:1px solid #d4dae3;border-radius:9px;background:#fff;font-weight:600;font-size:13px;color:#516074;cursor:pointer;">Stop Camera</button>';
+  } else {
+    camSection = '<button onclick="startCamera();" style="width:100%;padding:14px;border:1px dashed #b9c2cf;border-radius:10px;background:#f7f9fc;font-weight:600;font-size:13.5px;color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;"><span style="width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block;"></span>Scan QR with Camera</button>';
+  }
+  if (state.cameraErr) {
+    camSection += '<div style="margin-top:10px;font-size:11.5px;color:#a07a32;background:#fdf4e6;border:1px solid #f3e0bf;border-radius:8px;padding:9px 12px;line-height:1.45;">'+escHtml(state.cameraErr)+'</div>';
+  }
+
+  var validateCard = card(
+    '<span style="font-size:14px;font-weight:600;">Validate at Catering Point</span>' +
+    '<div style="margin-top:18px;">'+camSection+'</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 14px;color:#9aa4b2;font-size:10px;letter-spacing:.1em;font-family:\'IBM Plex Mono\',monospace;"><div style="flex:1;height:1px;background:#e4e8ee;"></div>OR KEY IN MANUALLY<div style="flex:1;height:1px;background:#e4e8ee;"></div></div>' +
+    '<div style="display:flex;gap:10px;"><input id="scan-input" value="'+escHtml(state.scanCode)+'" oninput="state.scanCode=this.value;state.scanResult=null;" onkeydown="if(event.key===\'Enter\')doRedeem();" placeholder="Scan or enter code" style="flex:1;padding:13px 14px;border:1px solid #d4dae3;border-radius:9px;font-size:16px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.1em;text-transform:uppercase;"><button onclick="doRedeem();" style="padding:0 22px;border:none;border-radius:9px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Validate</button></div>' +
+    '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#9aa4b2;margin-top:18px;">Outstanding codes — tap to test</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;">'+scanChips+'</div>',
+    'padding:24px;'
+  );
+
+  var resultBanner = '';
+  if (state.scanResult) {
+    var sr = state.scanResult;
+    if (sr.status==='ok') {
+      resultBanner = '<div style="background:color-mix(in srgb,#1f9d6b 8%,#fff);border:1px solid #cfe9da;border-radius:12px;padding:22px;display:flex;align-items:center;gap:16px;"><span style="width:46px;height:46px;border-radius:50%;background:#1f9d6b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;flex:none;">&#10003;</span><div style="flex:1;"><div style="font-weight:700;font-size:16px;color:#137a52;">Valid · Redeemed</div><div style="font-size:12.5px;color:#3c4757;margin-top:3px;">'+escHtml(sr.voucher.code)+' · '+(sr.voucher.meal||'')+' · '+escHtml(sr.venueName)+'</div><div style="font-size:11.5px;color:#5a9c80;margin-top:2px;">Marked redeemed at '+escHtml(sr.timeStr)+' · '+escHtml(sr.who)+'</div></div></div>';
+    } else if (sr.status==='used') {
+      resultBanner = '<div style="background:#fdf4e6;border:1px solid #f3e0bf;border-radius:12px;padding:22px;display:flex;align-items:center;gap:16px;"><span style="width:46px;height:46px;border-radius:50%;background:#d99413;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;flex:none;">!</span><div style="flex:1;"><div style="font-weight:700;font-size:16px;color:#9a6a0c;">Already Redeemed</div><div style="font-size:12.5px;color:#3c4757;margin-top:3px;">'+escHtml(sr.voucher.code)+' · '+escHtml(sr.who)+'</div><div style="font-size:11.5px;color:#a07a32;margin-top:2px;">'+escHtml(sr.msg)+'</div></div></div>';
+    } else {
+      resultBanner = '<div style="background:#fdeceb;border:1px solid #f6d4d1;border-radius:12px;padding:22px;display:flex;align-items:center;gap:16px;"><span style="width:46px;height:46px;border-radius:50%;background:#c0392b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none;">&#10005;</span><div style="flex:1;"><div style="font-weight:700;font-size:16px;color:#a82e21;">Invalid / Expired</div><div style="font-size:12.5px;color:#3c4757;margin-top:3px;">'+escHtml(sr.msg)+'</div></div></div>';
+    }
+  }
+
+  return '<div style="animation:mvsIn .25s ease;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">'+validateCard+resultBanner+'</div>';
+}
+
+function renderNotifications() {
+  var db = state.db;
+  var items = db.notifications.slice(0,40).map(function(n){
+    var isIssued = n.type==='issued';
+    var iconStyle = 'width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex:none;' + (isIssued?'background:color-mix(in srgb,var(--accent) 13%,#fff);color:var(--accent);':'background:#fdeaea;color:#c0392b;');
+    var badgeStyle = "font-size:10px;font-weight:600;padding:2px 8px;border-radius:5px;font-family:'IBM Plex Mono',monospace;" + (isIssued?'background:color-mix(in srgb,var(--accent) 13%,#fff);color:var(--accent);':'background:#fdeaea;color:#c0392b;');
+    var subject = isIssued ? 'Voucher Issued' : 'Request Denied';
+    var snippet = isIssued ? (escHtml(n.code||'')+'  ·  '+escHtml(n.meal||'')+'  ·  '+escHtml(n.venueName||'')) : escHtml(n.reason||'');
+    var initial = ((n.staffName||'?').charAt(0)).toUpperCase();
+    return '<div style="background:#fff;border:1px solid #e4e8ee;border-radius:11px;box-shadow:0 1px 2px rgba(20,30,50,.04);padding:15px 18px;display:flex;align-items:center;gap:14px;"><span style="'+iconStyle+'">'+initial+'</span><div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:9px;"><span style="'+badgeStyle+'">'+subject+'</span><span style="font-size:12.5px;font-weight:600;">'+escHtml(n.staffName||'')+'</span><span style="font-size:11px;color:#9aa4b2;font-family:\'IBM Plex Mono\',monospace;">'+escHtml(n.staffId||'')+'</span></div><div style="font-size:12px;color:#6a7589;margin-top:5px;font-family:\'IBM Plex Mono\',monospace;">'+snippet+'</div></div><span style="font-size:11.5px;color:#9aa4b2;font-family:\'IBM Plex Mono\',monospace;flex:none;">'+fmtTime(n.time)+'</span></div>';
+  }).join('');
+  return '<div style="animation:mvsIn .25s ease;max-width:760px;display:flex;flex-direction:column;gap:10px;">'+items+'</div>';
+}
+
+function renderConfig() {
+  var db = state.db;
+  var venueRows = db.venues.map(function(v){
+    if (state.editVenueId === v.id) {
+      return '<div style="border-bottom:1px solid #f4f6f9;"><div style="display:grid;grid-template-columns:0.85fr 1.6fr 0.8fr 1.2fr 0.9fr 1fr;gap:10px;align-items:center;padding:10px 4px;background:#f9fbfe;"><span style="font-family:\'IBM Plex Mono\',monospace;color:#9aa4b2;font-size:11px;">'+escHtml(v.id)+'</span><input value="'+escHtml(state.eName)+'" oninput="state.eName=this.value;" style="padding:8px 9px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;width:100%;"><select onchange="state.eType=this.value;" style="padding:8px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;background:#fff;cursor:pointer;width:100%;"><option value="MMC"'+(state.eType==='MMC'?' selected':'')+'>MMC</option><option value="Stadium"'+(state.eType==='Stadium'?' selected':'')+'>Stadium</option></select><input value="'+escHtml(state.eWindow)+'" oninput="state.eWindow=this.value;" style="padding:8px 9px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;font-family:\'IBM Plex Mono\',monospace;width:100%;"><input value="'+escHtml(state.eZone)+'" oninput="state.eZone=this.value;" style="padding:8px 9px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;width:100%;"><div style="display:flex;gap:6px;justify-content:flex-end;"><button onclick="doSaveVenue();" style="padding:7px 12px;border:none;border-radius:7px;background:var(--accent);color:#fff;font-size:11.5px;font-weight:600;cursor:pointer;">Save</button><button onclick="state.editVenueId=null;render();" style="padding:7px 9px;border:1px solid #d4dae3;border-radius:7px;background:#fff;color:#6a7589;font-size:11.5px;cursor:pointer;">Cancel</button></div></div></div>';
+    }
+    return '<div style="border-bottom:1px solid #f4f6f9;"><div style="display:grid;grid-template-columns:0.85fr 1.6fr 0.8fr 1.2fr 0.9fr 1fr;gap:10px;align-items:center;padding:12px 4px;font-size:12.5px;"><span style="font-family:\'IBM Plex Mono\',monospace;color:#516074;">'+escHtml(v.id)+'</span><span style="font-weight:600;">'+escHtml(v.name)+'</span><span><span style="'+typeStyle(v.type)+'">'+v.type+'</span></span><span style="color:#516074;font-family:\'IBM Plex Mono\',monospace;">'+escHtml(v.window)+'</span><span style="color:#6a7589;">'+escHtml(v.zone)+'</span><div style="display:flex;gap:6px;justify-content:flex-end;"><button onclick="state.editVenueId=\''+v.id+'\';state.eName=\''+escAttr(v.name)+'\';state.eType=\''+v.type+'\';state.eWindow=\''+escAttr(v.window)+'\';state.eZone=\''+escAttr(v.zone)+'\';render();" style="padding:6px 11px;border:1px solid #d4dae3;border-radius:7px;background:#fff;color:#516074;font-size:11.5px;font-weight:600;cursor:pointer;">Edit</button><button onclick="doRemoveVenue(\''+v.id+'\');" style="padding:6px 9px;border:1px solid #f0d3cf;border-radius:7px;background:#fff;color:#c0392b;font-size:11.5px;cursor:pointer;">Remove</button></div></div></div>';
+  }).join('');
+
+  var venuesPanel = card(
+    '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:13.5px;font-weight:600;">Venue Nodes</span><span style="font-size:11px;color:#9aa4b2;">Add, edit or remove venues</span></div>' +
+    '<div style="display:grid;grid-template-columns:0.85fr 1.6fr 0.8fr 1.2fr 0.9fr 1fr;gap:10px;margin-top:16px;padding:0 4px 10px;border-bottom:1px solid #eef1f5;font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9aa4b2;"><span>ID</span><span>Name</span><span>Protocol</span><span>Window</span><span>Zone</span><span style="text-align:right;">Actions</span></div>' +
+    venueRows +
+    '<div style="display:flex;gap:10px;margin-top:16px;align-items:center;"><input id="nv-name" value="'+escHtml(state.nvName)+'" oninput="state.nvName=this.value;" placeholder="New venue name" style="flex:1;padding:10px 12px;border:1px solid #d4dae3;border-radius:9px;font-size:13px;"><select id="nv-type" onchange="state.nvType=this.value;" style="padding:10px 12px;border:1px solid #d4dae3;border-radius:9px;font-size:13px;background:#fff;cursor:pointer;"><option value="MMC"'+(state.nvType==='MMC'?' selected':'')+'>MMC</option><option value="Stadium"'+(state.nvType==='Stadium'?' selected':'')+'>Stadium</option></select><button onclick="doAddVenue();" style="padding:10px 18px;border:none;border-radius:9px;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;">Onboard</button></div>',
+    'padding:20px;'
+  );
+
+  var staffRows = db.staff.map(function(st){
+    return '<div style="display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid #f4f6f9;"><span style="width:34px;height:34px;border-radius:50%;background:color-mix(in srgb,var(--accent) 13%,#fff);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none;">'+st.name.charAt(0)+'</span><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">'+escHtml(st.name)+'</div><div style="font-size:11px;color:#9aa4b2;">'+escHtml(st.role)+' · '+escHtml(st.org)+'</div></div><span style="font-family:\'IBM Plex Mono\',monospace;font-size:11.5px;color:#516074;">'+escHtml(st.id)+'</span></div>';
+  }).join('');
+
+  var matchRows = db.matches.map(function(m){
+    var vn = db.venues.filter(function(v){ return v.id===m.venueId; })[0];
+    return '<div style="border:1px solid #eef1f5;border-radius:9px;padding:13px;"><div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:600;font-size:13px;">'+escHtml(m.name)+'</span><span style="font-family:\'IBM Plex Mono\',monospace;font-size:12px;color:var(--accent);font-weight:600;">'+escHtml(m.time)+'</span></div><div style="font-size:11px;color:#9aa4b2;margin-top:4px;font-family:\'IBM Plex Mono\',monospace;">'+escHtml(m.id)+' · '+(vn?escHtml(vn.name):escHtml(m.venueId))+'</div></div>';
+  }).join('');
+
+  var bottomGrid = '<div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;">' +
+    card('<span style="font-size:13.5px;font-weight:600;">Approved Staff</span><div style="margin-top:14px;display:flex;flex-direction:column;">'+staffRows+'</div>','padding:20px;') +
+    card('<span style="font-size:13.5px;font-weight:600;">Today\'s Matches</span><div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;flex:1;">'+matchRows+'</div><button onclick="doReset();" style="margin-top:16px;padding:10px;border:1px solid #f0d3cf;border-radius:9px;background:#fff;color:#c0392b;font-weight:600;font-size:12.5px;cursor:pointer;width:100%;">Reset Demo Data</button>','padding:20px;display:flex;flex-direction:column;') +
+    '</div>';
+
+  return '<div style="animation:mvsIn .25s ease;display:flex;flex-direction:column;gap:16px;max-width:980px;">'+venuesPanel+bottomGrid+'</div>';
+}
+
+function renderPMPC() {
+  var db = state.db;
+  var pmpc = db.pmpc || [];
+
+  var rows = pmpc.map(function(row, i){
+    if (state.editPmIdx === i) {
+      return '<div style="border-bottom:1px solid #f4f6f9;"><div style="display:grid;grid-template-columns:0.6fr 0.85fr 0.5fr 1.2fr 2.2fr 0.9fr;gap:8px;align-items:start;padding:10px 4px;background:#f9fbfe;"><input value="'+escHtml(state.pDate)+'" oninput="state.pDate=this.value;" style="padding:8px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;width:100%;"><input value="'+escHtml(state.pRoom)+'" oninput="state.pRoom=this.value;" style="padding:8px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;width:100%;"><input value="'+escHtml(state.pTime)+'" oninput="state.pTime=this.value;" style="padding:8px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;width:100%;"><div style="display:flex;gap:6px;"><input value="'+escHtml(state.pFlag)+'" oninput="state.pFlag=this.value;" style="width:46px;padding:8px;border:1px solid #c9d2dd;border-radius:7px;font-size:14px;text-align:center;"><input value="'+escHtml(state.pTeam)+'" oninput="state.pTeam=this.value;" style="flex:1;min-width:0;padding:8px;border:1px solid #c9d2dd;border-radius:7px;font-size:12px;"></div><textarea oninput="state.pDetail=this.value;" rows="2" style="width:100%;padding:8px;border:1px solid #c9d2dd;border-radius:7px;font-size:11.5px;font-family:inherit;resize:vertical;">'+escHtml(state.pDetail)+'</textarea><div style="display:flex;gap:6px;justify-content:flex-end;"><button onclick="doSavePm();" style="padding:7px 12px;border:none;border-radius:7px;background:var(--accent);color:#fff;font-size:11.5px;font-weight:600;cursor:pointer;">Save</button><button onclick="state.editPmIdx=null;render();" style="padding:7px 9px;border:1px solid #d4dae3;border-radius:7px;background:#fff;color:#6a7589;font-size:11.5px;cursor:pointer;">Cancel</button></div></div></div>';
+    }
+    return '<div style="border-bottom:1px solid #f4f6f9;"><div style="display:grid;grid-template-columns:0.6fr 0.85fr 0.5fr 1.2fr 2.2fr 0.9fr;gap:10px;align-items:center;padding:12px 4px;"><span style="font-family:\'IBM Plex Mono\',monospace;font-size:12px;color:#516074;">'+escHtml(row.date)+'</span><span style="font-size:12px;color:#6a7589;">'+escHtml(row.room)+'</span><span style="font-family:\'IBM Plex Mono\',monospace;font-size:12px;font-weight:600;color:var(--accent);">'+escHtml(row.time)+'</span><span style="font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;"><span style="font-size:16px;">'+row.flag+'</span>'+escHtml(row.team)+'</span><span style="font-size:11px;color:#6a7589;line-height:1.4;">'+escHtml(row.detail)+'</span><div style="display:flex;gap:6px;justify-content:flex-end;"><button onclick="state.editPmIdx='+i+';state.pDate=\''+escAttr(row.date)+'\';state.pRoom=\''+escAttr(row.room)+'\';state.pTime=\''+escAttr(row.time)+'\';state.pFlag=\''+escAttr(row.flag)+'\';state.pTeam=\''+escAttr(row.team)+'\';state.pDetail=\''+escAttr(row.detail)+'\';render();" style="padding:6px 11px;border:1px solid #d4dae3;border-radius:7px;background:#fff;color:#516074;font-size:11.5px;font-weight:600;cursor:pointer;">Edit</button><button onclick="doRemovePm('+i+');" style="padding:6px 9px;border:1px solid #f0d3cf;border-radius:7px;background:#fff;color:#c0392b;font-size:11.5px;cursor:pointer;">Remove</button></div></div></div>';
+  }).join('');
+
+  var addForm = '<div style="margin-top:16px;padding-top:16px;border-top:1px dashed #e4e8ee;"><div style="font-size:10px;color:#9aa4b2;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;">Add a session</div><div style="display:grid;grid-template-columns:0.6fr 0.85fr 0.5fr 1.2fr 2.2fr 0.9fr;gap:8px;align-items:start;"><input value="'+escHtml(state.npDate)+'" oninput="state.npDate=this.value;" placeholder="16 Jan" style="padding:8px;border:1px solid #d4dae3;border-radius:7px;font-size:12px;width:100%;"><input value="'+escHtml(state.npRoom)+'" oninput="state.npRoom=this.value;" placeholder="PC Room 1" style="padding:8px;border:1px solid #d4dae3;border-radius:7px;font-size:12px;width:100%;"><input value="'+escHtml(state.npTime)+'" oninput="state.npTime=this.value;" placeholder="11:00" style="padding:8px;border:1px solid #d4dae3;border-radius:7px;font-size:12px;width:100%;"><div style="display:flex;gap:6px;"><input value="'+escHtml(state.npFlag)+'" oninput="state.npFlag=this.value;" placeholder="&#127988;" style="width:46px;padding:8px;border:1px solid #d4dae3;border-radius:7px;font-size:14px;text-align:center;"><input value="'+escHtml(state.npTeam)+'" oninput="state.npTeam=this.value;" placeholder="Team" style="flex:1;min-width:0;padding:8px;border:1px solid #d4dae3;border-radius:7px;font-size:12px;"></div><textarea oninput="state.npDetail=this.value;" rows="2" placeholder="Speakers &amp; session details" style="width:100%;padding:8px;border:1px solid #d4dae3;border-radius:7px;font-size:11.5px;font-family:inherit;resize:vertical;">'+escHtml(state.npDetail)+'</textarea><div style="display:flex;justify-content:flex-end;"><button onclick="doAddPm();" style="padding:8px 16px;border:none;border-radius:7px;background:var(--accent);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Add</button></div></div></div>';
+
+  var infoCard = card(
+    '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:13.5px;font-weight:600;">Schedule Information</span><button onclick="doSavePmInfo();" style="padding:8px 15px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Save info</button></div>' +
+    '<textarea oninput="state.pmInfo=this.value;" rows="2" style="width:100%;margin-top:12px;padding:12px 13px;border:1px solid #d4dae3;border-radius:10px;font-size:12.5px;font-family:inherit;resize:vertical;color:#3c4757;line-height:1.5;">'+escHtml(state.pmInfo)+'</textarea>',
+    'padding:20px;'
+  );
+
+  var sessionsCard = card(
+    '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:13.5px;font-weight:600;">PMPC Sessions</span><span style="font-size:11px;color:#9aa4b2;">'+pmpc.length+' sessions</span></div>' +
+    '<div style="display:grid;grid-template-columns:0.6fr 0.85fr 0.5fr 1.2fr 2.2fr 0.9fr;gap:10px;margin-top:16px;padding:0 4px 10px;border-bottom:1px solid #eef1f5;font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9aa4b2;"><span>Date</span><span>Room</span><span>Time</span><span>Team</span><span>Details</span><span style="text-align:right;">Actions</span></div>' +
+    rows + addForm,
+    'padding:20px;'
+  );
+
+  return '<div style="animation:mvsIn .25s ease;max-width:1040px;display:flex;flex-direction:column;gap:16px;">'+infoCard+sessionsCard+'</div>';
+}
+
+function escHtml(s) {
+  if (s==null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  if (s==null) return '';
+  return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,' ');
+}
+
+var VIEW_TITLES = {
+  dashboard: ['Operations Dashboard','Real-time issuance & redemption across all venues'],
+  request: ['Voucher Request Portal','Client web app · identity verification, eligibility & QR'],
+  scan: ['Verification & Redemption','Volunteer portal · camera scan or manual key-in'],
+  notifications: ['Notifications','Automated email dispatch log'],
+  config: ['Venue Management','Admin panel · provision venues on demand'],
+  pmpc: ['Pre-Match Press Conferences','Integrated PMPC schedule · MMC PC Rooms 1 & 2']
+};
+
+var NAV_ITEMS = [
+  {key:'dashboard',label:'Dashboard',sub:'Live ops overview'},
+  {key:'request',label:'Request Portal',sub:'Client · ID & QR'},
+  {key:'scan',label:'Verify & Redeem',sub:'Volunteer · scan'},
+  {key:'pmpc',label:'PMPC Schedule',sub:'Press conferences'},
+  {key:'notifications',label:'Notifications',sub:'Email log'},
+  {key:'config',label:'Venue Management',sub:'Admin panel'}
+];
+
+function renderShell() {
+  var navHtml = NAV_ITEMS.map(function(item){
+    var active = state.view === item.key;
+    return '<button onclick="setView(\''+item.key+'\');" style="display:flex;flex-direction:column;gap:1px;width:100%;text-align:left;padding:10px 13px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;background:'+(active?'var(--accent)':'transparent')+';color:'+(active?'#fff':'#a7b0bf')+';">' +
+      '<span style="font-size:13.5px;font-weight:600;letter-spacing:.01em;">'+item.label+'</span>' +
+      '<span style="font-size:11px;font-weight:500;opacity:'+(active?'.85':'.55')+';">'+item.sub+'</span>' +
+      '</button>';
+  }).join('');
+
+  var titles = VIEW_TITLES[state.view] || ['',''];
+
+  return '<aside style="width:246px;flex:none;background:#0e1626;color:#a7b0bf;display:flex;flex-direction:column;padding:20px 0;">' +
+    '<div style="padding:2px 20px 20px;border-bottom:1px solid #1c2740;margin-bottom:16px;">' +
+    '<div style="display:flex;align-items:center;gap:9px;"><span style="width:26px;height:26px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;">M</span><span style="font-size:14.5px;font-weight:600;color:#fff;">AFC2027</span></div>' +
+    '<div style="font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:#5d6a82;margin-top:9px;font-family:\'IBM Plex Mono\',monospace;">Meal Voucher Ops</div>' +
+    '</div>' +
+    '<nav style="display:flex;flex-direction:column;gap:4px;padding:0 12px;flex:1;">'+navHtml+'</nav>' +
+    '<div style="padding:14px 22px 2px;border-top:1px solid #1c2740;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#7c879b;"><span style="width:7px;height:7px;border-radius:50%;background:#22b07d;animation:mvsPulse 1.8s infinite;display:inline-block;"></span>Hub · all nodes online</div>' +
+    '</aside>' +
+    '<div style="flex:1;display:flex;flex-direction:column;min-width:0;">' +
+    '<header style="height:62px;flex:none;background:#fff;border-bottom:1px solid #e4e8ee;display:flex;align-items:center;justify-content:space-between;padding:0 26px;">' +
+    '<div style="display:flex;flex-direction:column;"><span style="font-size:15.5px;font-weight:600;">'+titles[0]+'</span><span style="font-size:11.5px;color:#8893a3;">'+titles[1]+'</span></div>' +
+    '<div style="display:flex;align-items:center;gap:18px;"><div style="text-align:right;"><div id="clock" style="font-family:\'IBM Plex Mono\',monospace;font-size:15px;font-weight:600;letter-spacing:.02em;">'+fmtClock(state.now)+'</div><div id="date-line" style="font-size:11px;color:#8893a3;">'+fmtDateLong(state.now)+'</div></div><div style="display:flex;align-items:center;gap:7px;background:color-mix(in srgb, var(--accent) 10%, #fff);color:var(--accent);padding:7px 12px;border-radius:20px;font-size:11.5px;font-weight:600;"><span style="width:7px;height:7px;border-radius:50%;background:#22b07d;animation:mvsPulse 1.8s infinite;display:inline-block;"></span>Live</div></div>' +
+    '</header>' +
+    '<div id="content" style="flex:1;overflow:auto;padding:26px 28px;"></div>' +
+    '</div>';
+}
+
+function renderContent() {
+  if (!state.db) return '<div style="color:#9aa4b2;font-size:14px;">Loading...</div>';
+  switch (state.view) {
+    case 'dashboard': return renderDashboard();
+    case 'request': return renderRequest();
+    case 'scan': return renderScan();
+    case 'notifications': return renderNotifications();
+    case 'config': return renderConfig();
+    case 'pmpc': return renderPMPC();
+    default: return '';
+  }
+}
+
+var _shellRendered = false;
+
+function render() {
+  var app = document.getElementById('app');
+  if (!_shellRendered) {
+    app.innerHTML = renderShell();
+    _shellRendered = true;
+  } else {
+    // Update nav active states
+    NAV_ITEMS.forEach(function(item){
+      var active = state.view === item.key;
+      var btns = app.querySelectorAll('aside nav button');
+      btns.forEach(function(btn){
+        var labelEl = btn.querySelector('span:first-child');
+        if (labelEl && labelEl.textContent === item.label) {
+          btn.style.background = active ? 'var(--accent)' : 'transparent';
+          btn.style.color = active ? '#fff' : '#a7b0bf';
+          var subEl = btn.querySelector('span:last-child');
+          if (subEl) subEl.style.opacity = active ? '.85' : '.55';
+        }
+      });
+    });
+    // Update header title
+    var titles = VIEW_TITLES[state.view] || ['',''];
+    var headerSpans = app.querySelectorAll('header > div:first-child span');
+    if (headerSpans[0]) headerSpans[0].textContent = titles[0];
+    if (headerSpans[1]) headerSpans[1].textContent = titles[1];
+  }
+  var content = document.getElementById('content');
+  if (content) content.innerHTML = renderContent();
+
+  // Post-render: set QR image if needed
+  if (state.result && state.result.status === 'issued' && state.result.qr) {
+    var qrImg = document.getElementById('qr-img');
+    if (qrImg) qrImg.src = state.result.qr;
+  }
+  // Re-attach camera video if camera is on
+  if (state.cameraOn && _stream) {
+    _videoEl = document.getElementById('cam-video');
+    if (_videoEl && !_videoEl.srcObject) {
+      _videoEl.srcObject = _stream;
+      _videoEl.play().catch(function(){});
+    }
+  }
+}
+
+function renderClock() {
+  var clockEl = document.getElementById('clock');
+  var dateEl = document.getElementById('date-line');
+  if (clockEl) clockEl.textContent = fmtClock(state.now);
+  if (dateEl) dateEl.textContent = fmtDateLong(state.now);
+}
+
+// ---- INIT ----
+(function init() {
+  var db = loadDB();
+  state.db = db;
+  state.pmInfo = db.pmpcInfo || '';
+  // Set default reqMatchId for stadium venues
+  var reqVenue = db.venues.filter(function(v){ return v.id===state.reqVenueId; })[0];
+  if (reqVenue && reqVenue.type === 'Stadium') {
+    var m = db.matches.filter(function(mm){ return mm.venueId===state.reqVenueId; })[0];
+    state.reqMatchId = m ? m.id : '';
+  }
+
+  render();
+
+  setInterval(function(){
+    state.now = new Date();
+    renderClock();
+  }, 1000);
+})();
+</script>
+</body>
+</html>

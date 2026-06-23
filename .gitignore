@@ -1,0 +1,19 @@
+node_modules/
+data.json
+data.json.tmp
+data.test.json
+npm-debug.log*
+.DS_Store
+
+# Local environment configuration (never commit secrets)
+.env
+
+# Regenerable artifacts (recreate with `npm run qr`)
+client-app-qr.png
+
+# Local, machine-specific Claude Code settings
+.claude/settings.local.json
+
+# Bundled portable Node runtime (regenerable; ~100 MB)
+.node-portable/
+.node-portable.zip

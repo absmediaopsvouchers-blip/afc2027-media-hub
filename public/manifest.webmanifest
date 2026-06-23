@@ -1,0 +1,20 @@
+{
+  "name": "AFC 2027 Media Hub — Meal Vouchers",
+  "short_name": "Media Hub",
+  "description": "Digital meal vouchers and media information hub for AFC Asian Cup 2027.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12274a",
+  "theme_color": "#12274a",
+  "categories": ["sports", "utilities", "food"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

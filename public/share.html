@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12274a">
+  <title>Scan to open · Media Hub · AFC Asian Cup 2027</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="icon" href="/icons/icon.svg">
+  <style>
+    .share-wrap { max-width: 560px; margin: 4vh auto 0; }
+    .share-card { padding: 30px 26px; text-align: center; }
+    .share-kicker { font-size: .72rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+    .share-card h1 { font-size: 1.6rem; margin: 6px 0 4px; }
+    .share-card .lead { color: var(--muted); margin: 0 0 22px; }
+    .qr-box {
+      width: 300px; max-width: 78vw; aspect-ratio: 1; margin: 0 auto 18px;
+      background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg);
+      padding: 16px; box-shadow: var(--shadow);
+    }
+    .qr-box img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+    .share-url {
+      font-family: var(--mono); font-weight: 600; font-size: 1rem; color: var(--brand-2);
+      word-break: break-all; background: var(--surface-2); border: 1px solid var(--line-2);
+      border-radius: var(--r-sm); padding: 12px 14px; margin: 0 auto 18px;
+    }
+    .share-steps { text-align: left; display: grid; gap: 10px; margin: 0 auto 22px; max-width: 380px; }
+    .share-step { display: flex; gap: 11px; align-items: flex-start; font-size: .92rem; }
+    .share-step .n {
+      flex: none; width: 24px; height: 24px; border-radius: 50%;
+      background: var(--accent-soft); color: var(--accent-press);
+      font-weight: 700; font-size: .82rem; display: grid; place-items: center;
+    }
+    .share-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    @media print {
+      body { background: #fff; }
+      .appbar, .share-actions, .no-print { display: none !important; }
+      .share-wrap { margin-top: 0; }
+      .share-card { box-shadow: none; border: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand">
+      <div class="brand-mark" id="brand-mark"></div>
+      <div class="brand-text">
+        <div class="brand-title">Media Hub</div>
+        <div class="brand-sub" id="brand-sub">AFC Asian Cup 2027</div>
+      </div>
+    </div>
+    <div class="appbar-spacer"></div>
+    <a class="appbar-link" href="/" id="back-link"></a>
+  </header>
+
+  <main class="view">
+    <div class="share-wrap">
+      <div class="card share-card">
+        <div class="share-kicker">Media Catering &amp; Info Hub</div>
+        <h1 id="title">Scan to open the app</h1>
+        <p class="lead" id="lead">Point your phone camera at the code below.</p>
+
+        <div class="qr-box" id="qr-box"><div class="loading"><div class="spinner"></div></div></div>
+        <div class="share-url" id="url">…</div>
+
+        <div class="share-steps no-print">
+          <div class="share-step"><span class="n">1</span><span>Open your phone’s camera (or any QR scanner).</span></div>
+          <div class="share-step"><span class="n">2</span><span>Point it at the QR code and tap the link that appears.</span></div>
+          <div class="share-step"><span class="n">3</span><span>Add to Home Screen for one-tap access during the event.</span></div>
+        </div>
+
+        <div class="share-actions">
+          <button class="btn btn-primary" id="print-btn">Print this page</button>
+          <a class="btn btn-ghost" href="/">Open the app</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/common.js"></script>
+  <script>
+    document.getElementById('brand-mark').innerHTML = ICONS.ticket;
+    document.getElementById('back-link').innerHTML = ICONS.back + '<span>Back to app</span>';
+    document.getElementById('print-btn').addEventListener('click', () => window.print());
+
+    (async function () {
+      try {
+        const [meta, share] = await Promise.all([
+          API.get('/meta').catch(() => null),
+          API.get('/share'),
+        ]);
+        if (meta && meta.event) {
+          document.getElementById('brand-sub').textContent = meta.event;
+          document.getElementById('title').textContent = 'Scan to open the ' + (meta.subtitle ? 'Media Hub' : 'app');
+        }
+        const box = document.getElementById('qr-box');
+        box.innerHTML = share.qr
+          ? '<img src="' + share.qr + '" alt="QR code to open the Media Hub client app">'
+          : '<div class="muted center">QR unavailable</div>';
+        document.getElementById('url').textContent = share.url;
+      } catch (e) {
+        document.getElementById('qr-box').innerHTML = '<div class="muted center" style="padding:20px">' + esc(e.message) + '</div>';
+      }
+    })();
+  </script>
+</body>
+</html>

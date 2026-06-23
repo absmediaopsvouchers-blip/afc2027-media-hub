@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12274a">
+  <title>Admin · Media Hub · AFC Asian Cup 2027</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Media Hub Admin">
+  <link rel="apple-touch-icon" href="/icons/icon.svg">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%2312274a'/%3E%3Cpath d='M6 13l4 4 8-9' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand">
+      <div class="brand-mark" id="brand-mark"></div>
+      <div class="brand-text">
+        <div class="brand-title">Admin Dashboard</div>
+        <div class="brand-sub">AFC Asian Cup 2027 · Media Ops</div>
+      </div>
+    </div>
+    <div class="appbar-spacer"></div>
+    <div class="appbar-right">
+      <span class="clock" id="clock">--:--:--</span>
+      <a class="appbar-link" href="/" id="client-link"></a>
+      <button class="appbar-link" id="logout-btn" style="display:none;cursor:pointer"></button>
+    </div>
+  </header>
+
+  <main class="view" id="view"></main>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/admin.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+node_modules
+.node-portable
+.node-portable.zip
+.git
+.env
+data.json
+data.json.tmp
+data.test.json
+npm-debug.log*
+.DS_Store
+client-app-qr.png
+*.pptx
+presentation
+Client Voucher App (standalone).html
+Meal Voucher Ops (standalone).html

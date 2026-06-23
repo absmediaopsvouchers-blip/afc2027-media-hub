@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "media-hub",
+      "runtimeExecutable": "C:\\Users\\adilo\\Downloads\\Meal Vouchers System\\.node-portable\\node-v24.17.0-win-x64\\node.exe",
+      "runtimeArgs": ["server.js"],
+      "port": 3000
+    }
+  ]
+}

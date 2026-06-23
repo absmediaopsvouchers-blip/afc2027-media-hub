@@ -1,0 +1,25 @@
+{
+  "name": "media-hub-voucher-system",
+  "version": "2.0.0",
+  "description": "AFC Asian Cup 2027 — Meal Vouchers & Media Info Hub. Cloud-deployable full-stack app that strictly enforces per-day voucher limits centrally. Pluggable storage: local JSON file, PostgreSQL, or MongoDB.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "db:init": "node scripts/init-db.js",
+    "reset": "node scripts/reset-db.js",
+    "qr": "node scripts/make-qr.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3"
+  },
+  "optionalDependencies": {
+    "pg": "^8.11.5",
+    "mongoose": "^8.4.0"
+  },
+  "license": "MIT"
+}
