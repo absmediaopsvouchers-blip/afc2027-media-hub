@@ -171,13 +171,18 @@ in your cloud host's dashboard. **Nothing is required for local file mode.**
 > instance restarts (the local file store does **not** persist on most free tiers).
 
 ### Render — one-click Blueprint (recommended)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/absmediaopsvouchers-blip/afc2027-media-hub)
+
 This repo includes [`render.yaml`](render.yaml), which provisions a free web
 service **and** a free Postgres database and wires `DATABASE_URL` automatically.
 
-1. Push this project to a GitHub repo.
-2. In Render: **New + → Blueprint** → pick the repo.
-3. Set **`ADMIN_KEY`** to your own secret (and adjust `EVENT_TIMEZONE` if needed).
-4. Deploy. Your app is live at `https://<name>.onrender.com` (admin at `/admin`).
+1. Click the **Deploy to Render** button above (sign in to Render with GitHub the
+   first time — this is the one step only you can do).
+2. Render reads `render.yaml` and shows the web service + free Postgres it will
+   create. When prompted, set **`ADMIN_KEY`** to your own secret.
+3. Click **Apply**. After ~3–5 min your app is live at
+   `https://<name>.onrender.com` (admin at `/admin`).
 
 ### Render / any host — manual, with Neon or Supabase Postgres
 1. Create a free Postgres database at **[Neon](https://neon.tech)** or
