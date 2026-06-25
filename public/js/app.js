@@ -65,9 +65,12 @@ async function loadConfig() {
     state.locations = locations || [];
     if (meta && meta.event) document.getElementById('brand-sub').textContent = meta.event;
     if (!state.form.locationId && state.locations.length) {
-      const first = state.locations[0];
-      state.form.locationId = first.id;
-      state.form.meal = first.type === 'Stadium' ? 'Meal' : 'Lunch';
+      // Default to the first venue that actually offers meals (skips Training etc.).
+      const first = state.locations.find((l) => l.allowedMeals && l.allowedMeals.length);
+      if (first) {
+        state.form.locationId = first.id;
+        state.form.meal = first.allowedMeals[0];
+      }
     }
     // Restore today's saved vouchers, then refresh from the server.
     loadCachedVouchers();
@@ -192,10 +195,11 @@ function renderVoucher() {
 }
 
 function locationOptions(selectedId) {
-  const groups = { MMC: 'Media Centres', Training: 'Training Sites', Stadium: 'Stadiums' };
+  const groups = { MMC: 'Media Centres', Stadium: 'Stadiums', Training: 'Training Sites' };
   let html = '';
   for (const type of Object.keys(groups)) {
-    const locs = state.locations.filter((l) => l.type === type);
+    // Only list venues that actually offer meals (Training Sites are excluded).
+    const locs = state.locations.filter((l) => l.type === type && l.allowedMeals && l.allowedMeals.length);
     if (!locs.length) continue;
     html += `<optgroup label="${esc(groups[type])}">`;
     for (const l of locs) {
@@ -206,25 +210,36 @@ function locationOptions(selectedId) {
   return html;
 }
 
-function mealSegHtml(type, selected) {
-  const metas = type === 'Stadium'
-    ? [{ v: 'Meal', label: 'Media Café Meal', sub: 'One per day' }]
-    : [
-        { v: 'Lunch', label: 'Lunch', sub: 'Midday service' },
-        { v: 'Dinner', label: 'Dinner', sub: 'Evening service' },
-      ];
-  return metas.map((m) =>
-    `<button type="button" data-meal="${m.v}" class="${m.v === selected ? 'active' : ''}">
+// Display metadata for each meal type. The set of meals a venue offers comes
+// from the server (location.allowedMeals), so the policy lives in one place.
+const MEAL_META = {
+  Lunch: { label: 'Lunch', sub: 'Midday service' },
+  Dinner: { label: 'Dinner', sub: 'Evening service' },
+  Meal: { label: 'Media Café Meal', sub: 'One per day' },
+};
+
+function mealsFor(locationId) {
+  const loc = state.locations.find((l) => l.id === locationId);
+  return (loc && loc.allowedMeals) ? loc.allowedMeals : [];
+}
+
+function mealSegHtml(allowed, selected) {
+  return allowed.map((v) => {
+    const m = MEAL_META[v] || { label: v, sub: '' };
+    return `<button type="button" data-meal="${esc(v)}" class="${v === selected ? 'active' : ''}">
        <span>${esc(m.label)}</span><span class="seg-sub">${esc(m.sub)}</span>
-     </button>`).join('');
+     </button>`;
+  }).join('');
 }
 
 function updateMeals(locationId) {
-  const loc = state.locations.find((l) => l.id === locationId);
-  const type = loc ? loc.type : 'MMC';
-  const allowed = type === 'Stadium' ? ['Meal'] : ['Lunch', 'Dinner'];
-  if (!allowed.includes(state.form.meal)) state.form.meal = allowed[0];
-  document.getElementById('v-meal').innerHTML = mealSegHtml(type, state.form.meal);
+  const allowed = mealsFor(locationId);
+  if (!allowed.includes(state.form.meal)) state.form.meal = allowed[0] || '';
+  const host = document.getElementById('v-meal');
+  if (!host) return;
+  host.innerHTML = allowed.length
+    ? mealSegHtml(allowed, state.form.meal)
+    : '<div class="muted" style="font-size:.9rem;padding:4px 2px">No meals are offered at this location.</div>';
 }
 
 function wireVoucherForm() {

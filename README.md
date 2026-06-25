@@ -74,12 +74,14 @@ the configured `EVENT_TIMEZONE`):
 
 | Location type | Allowance |
 |---|---|
-| Main Media Centre (MMC) & Training Sites | **1 Lunch** and **1 Dinner** |
+| Main Media Centre (MMC) | **1 Lunch** and **1 Dinner** |
 | Stadiums | **1 Meal** total (Media Café access) |
+| Training Sites | **No meal vouchers** — transport & info only |
 
 Limits are applied **per location**, so a journalist legitimately travelling
-between, say, the MMC and a training ground may hold a lunch at each. The policy
-lives in one file — [`src/rules.js`](src/rules.js). On the SQL/Mongo backends the
+between media centres may hold a lunch at each. Training Sites are out of scope
+for catering and don't appear in the voucher location list. The policy lives in
+one file — [`src/rules.js`](src/rules.js). On the SQL/Mongo backends the
 limit is additionally enforced by a database **UNIQUE constraint**
 `(email, location, date, meal_type)`, so it holds even under concurrent requests.
 

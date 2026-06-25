@@ -1,6 +1,6 @@
 'use strict';
 
-/* Generates the AFC Asian Cup 2027 Media Hub onboarding deck.
+/* Generates the AFC Asian Cup 2027 Media Hub onboarding deck (cloud edition).
    Run with:  node presentation/build_deck.js   (uses pptxgenjs in presentation/) */
 
 const path = require('path');
@@ -17,6 +17,8 @@ const PURPLE = '7A2BB8';
 const PURPLE_SOFT = 'F1E5FB';
 const AMBER = 'B9710A';
 const AMBER_SOFT = 'FBEFD9';
+const RED = 'D12626';
+const RED_SOFT = 'FDE6E6';
 const INK = '0F1A2E';
 const MUTED = '5C6A7E';
 const FAINT = '8A96A8';
@@ -27,6 +29,11 @@ const DARKMUTED = '93A4C6';
 
 const FONT = 'Segoe UI';
 const MONO = 'Consolas';
+
+// ---- live deployment -------------------------------------------------------
+const HOST = 'afc2027-media-hub.onrender.com';
+const URL_CLIENT = 'https://' + HOST;
+const URL_ADMIN = 'https://' + HOST + '/admin';
 
 // ---- geometry --------------------------------------------------------------
 const W = 13.333, H = 7.5;
@@ -214,36 +221,41 @@ function browser(s, x, y, w, h, url) {
 // =============================================================================
 (() => {
   const s = slideDark();
-  // soft accent blocks
   s.addShape(pres.shapes.OVAL, { x: 10.4, y: -1.4, w: 4.6, h: 4.6, fill: { color: NAVY2 }, line: { type: 'none' } });
   s.addShape(pres.shapes.OVAL, { x: 11.7, y: 4.6, w: 3.4, h: 3.4, fill: { color: '16305C' }, line: { type: 'none' } });
 
   // app icon tile
-  const ix = 9.7, iy = 2.35, isz = 1.9;
+  const ix = 9.7, iy = 2.1, isz = 1.9;
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ix, y: iy, w: isz, h: isz, rectRadius: 0.42, fill: { color: BLUE }, line: { type: 'none' }, shadow: shadow() });
-  // ticket glyph
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ix + 0.4, y: iy + 0.72, w: isz - 0.8, h: 0.52, rectRadius: 0.1, fill: { color: WHITE }, line: { type: 'none' } });
   s.addShape(pres.shapes.OVAL, { x: ix + 0.4 + (isz - 0.8) / 2 - 0.12, y: iy + 0.72 - 0.12, w: 0.24, h: 0.24, fill: { color: BLUE }, line: { type: 'none' } });
   s.addShape(pres.shapes.OVAL, { x: ix + 0.4 + (isz - 0.8) / 2 - 0.12, y: iy + 0.72 + 0.52 - 0.12, w: 0.24, h: 0.24, fill: { color: BLUE }, line: { type: 'none' } });
 
-  s.addText('SETUP & ONBOARDING GUIDE', { x: MX, y: 1.5, w: 8.5, h: 0.4, margin: 0, fontFace: FONT, fontSize: 14, bold: true, color: '6FA0FF', charSpacing: 4 });
-  s.addText('Media Hub', { x: MX, y: 2.0, w: 8.6, h: 1.3, margin: 0, fontFace: FONT, fontSize: 64, bold: true, color: WHITE });
-  s.addText('Meal Vouchers & Media Information — AFC Asian Cup 2027', { x: MX, y: 3.35, w: 8.6, h: 0.6, margin: 0, fontFace: FONT, fontSize: 19, color: 'CFDBF2' });
+  s.addText('SETUP & ONBOARDING GUIDE', { x: MX, y: 1.45, w: 8.5, h: 0.4, margin: 0, fontFace: FONT, fontSize: 14, bold: true, color: '6FA0FF', charSpacing: 4 });
+  s.addText('Media Hub', { x: MX, y: 1.95, w: 8.6, h: 1.3, margin: 0, fontFace: FONT, fontSize: 64, bold: true, color: WHITE });
+  s.addText('Meal Vouchers & Media Information — AFC Asian Cup 2027', { x: MX, y: 3.3, w: 8.6, h: 0.6, margin: 0, fontFace: FONT, fontSize: 19, color: 'CFDBF2' });
 
-  pill(s, 'For Administrators', MX, 4.35, 2.5, 0.5, BLUE, WHITE, 12.5);
-  pill(s, 'For Media Clients', MX + 2.7, 4.35, 2.4, 0.5, GREEN, WHITE, 12.5);
+  pill(s, 'For Administrators', MX, 4.3, 2.5, 0.5, BLUE, WHITE, 12.5);
+  pill(s, 'For Media Clients', MX + 2.7, 4.3, 2.4, 0.5, GREEN, WHITE, 12.5);
 
-  s.addText('How to run the system — and how to install it on your team’s phones.', { x: MX, y: 5.5, w: 8.6, h: 0.5, margin: 0, fontFace: FONT, fontSize: 13.5, italic: true, color: DARKMUTED });
+  // live URL strip
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: MX, y: 5.15, w: 7.4, h: 0.62, rectRadius: 0.12, fill: { color: '17305A' }, line: { type: 'none' } });
+  s.addText([
+    { text: 'LIVE  ', options: { color: '6BE0AE', bold: true, fontSize: 12 } },
+    { text: URL_CLIENT, options: { color: WHITE, bold: true, fontSize: 13.5, fontFace: MONO } },
+  ], { x: MX + 0.25, y: 5.15, w: 7.0, h: 0.62, margin: 0, fontFace: FONT, valign: 'middle', align: 'left' });
+
+  s.addText('Hosted in the cloud — open it from any phone, on Wi-Fi or mobile data.', { x: MX, y: 5.95, w: 8.6, h: 0.5, margin: 0, fontFace: FONT, fontSize: 13.5, italic: true, color: DARKMUTED });
   footer(s, true);
 })();
 
 // =============================================================================
-// SLIDE 2 — Overview: two apps
+// SLIDE 2 — Overview: two apps, one cloud address
 // =============================================================================
 (() => {
   const s = slideLight();
   kicker(s, 'Overview', BLUE);
-  title(s, 'Two apps, powered by one local server');
+  title(s, 'Two apps, one cloud address');
 
   const cy = 2.0, ch = 2.7, cw = 5.85, gap = CW - cw * 2;
   // Client card
@@ -255,48 +267,49 @@ function browser(s, x, y, w, h, url) {
   bullets(s, [
     'For accredited media members.',
     'Request meal vouchers — get a QR ticket.',
-    'Press conferences, news & shuttle info.',
-  ], MX + 0.35, cy + 1.05, cw - 0.7, 1.5, { fontSize: 13.5, gap: 8 });
-  s.addText('http://<host>:3000', { x: MX + 0.35, y: cy + ch - 0.5, w: cw - 0.7, h: 0.34, margin: 0, fontFace: MONO, fontSize: 12, color: GREEN, bold: true });
+    'Vouchers stay available all day.',
+    'Press, news & shuttle info.',
+  ], MX + 0.35, cy + 1.0, cw - 0.7, 1.5, { fontSize: 13, gap: 6 });
+  s.addText(HOST, { x: MX + 0.35, y: cy + ch - 0.45, w: cw - 0.7, h: 0.34, margin: 0, fontFace: MONO, fontSize: 12, color: GREEN, bold: true });
 
   // Admin card
   const ax = MX + cw + gap;
   card(s, ax, cy, cw, ch, { lineColor: BLUE_SOFT });
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ax, y: cy, w: cw, h: 0.85, rectRadius: 0.12, fill: { color: NAVY }, line: { type: 'none' } });
   s.addShape(pres.shapes.RECTANGLE, { x: ax, y: cy + 0.43, w: cw, h: 0.42, fill: { color: NAVY }, line: { type: 'none' } });
-  s.addText('Admin Dashboard', { x: ax + 0.3, y: cy, w: cw - 0.6, h: 0.85, margin: 0, fontFace: FONT, fontSize: 20, bold: true, color: WHITE, valign: 'middle' });
-  s.addText('at the media desk', { x: ax + 0.3, y: cy, w: cw - 0.6, h: 0.85, margin: 0, fontFace: FONT, fontSize: 12, color: 'BFD2F6', align: 'right', valign: 'middle' });
+  s.addText('Admin & Catering', { x: ax + 0.3, y: cy, w: cw - 0.6, h: 0.85, margin: 0, fontFace: FONT, fontSize: 20, bold: true, color: WHITE, valign: 'middle' });
+  s.addText('organizers + counter staff', { x: ax + 0.3, y: cy, w: cw - 0.6, h: 0.85, margin: 0, fontFace: FONT, fontSize: 12, color: 'BFD2F6', align: 'right', valign: 'middle' });
   bullets(s, [
-    'For event organizers.',
-    'Live analytics & voucher monitoring.',
-    'Manage news & press conferences.',
-  ], ax + 0.35, cy + 1.05, cw - 0.7, 1.5, { fontSize: 13.5, gap: 8 });
-  s.addText('http://<host>:3000/admin', { x: ax + 0.35, y: cy + ch - 0.5, w: cw - 0.7, h: 0.34, margin: 0, fontFace: MONO, fontSize: 12, color: BLUE, bold: true });
+    'Live analytics + CSV export.',
+    'Scan & redeem vouchers at the counter.',
+    'Manage venues, news, press & transport.',
+  ], ax + 0.35, cy + 1.0, cw - 0.7, 1.5, { fontSize: 13, gap: 6 });
+  s.addText(HOST + '/admin', { x: ax + 0.35, y: cy + ch - 0.45, w: cw - 0.7, h: 0.34, margin: 0, fontFace: MONO, fontSize: 12, color: BLUE, bold: true });
 
   // benefit strip
   const by = cy + ch + 0.35;
   card(s, MX, by, CW, 0.95, { fill: AMBER_SOFT, lineColor: 'F1DCB0', shadow: false });
   s.addText([
-    { text: 'Why a server?  ', options: { bold: true, color: AMBER, fontSize: 14 } },
-    { text: 'Every voucher is recorded centrally — so daily limits apply to everyone and can’t be bypassed with incognito mode or by clearing the browser cache.', options: { color: '7A4E08', fontSize: 13.5 } },
+    { text: 'Why a central server?  ', options: { bold: true, color: AMBER, fontSize: 14 } },
+    { text: 'Every voucher is recorded in a cloud database — daily limits apply to everyone and can’t be bypassed with incognito mode or by clearing the cache. Data survives restarts.', options: { color: '7A4E08', fontSize: 13 } },
   ], { x: MX + 0.35, y: by, w: CW - 0.7, h: 0.95, margin: 0, fontFace: FONT, valign: 'middle', align: 'left' });
   footer(s);
 })();
 
 // =============================================================================
-// SLIDE 3 — How it works
+// SLIDE 3 — How it works (cloud)
 // =============================================================================
 (() => {
   const s = slideLight();
   kicker(s, 'How it works', BLUE);
-  title(s, 'One laptop. Your Wi-Fi. Everyone’s phone.');
+  title(s, 'In the cloud — reachable anywhere');
 
   const cy = 2.4, ch = 2.7, cw = 3.5;
   const xs = [MX, MX + (CW - cw) / 2, MX + CW - cw];
   const nodes = [
-    { t: 'Host laptop', d: 'Runs the server and stores all data (data.json).', c: NAVY, sub: 'start.bat' },
-    { t: 'Venue Wi-Fi', d: 'Connects the laptop and the phones on one network.', c: BLUE, sub: 'same network' },
-    { t: 'Media phones', d: 'Open the app in any browser — no app store needed.', c: GREEN, sub: 'http://<ip>:3000' },
+    { t: 'Cloud server', d: 'Runs the app + a PostgreSQL database. Always on, no laptop needed.', c: NAVY, sub: 'Render + Postgres' },
+    { t: 'The internet', d: 'Reachable over mobile data (4G/5G) or any Wi-Fi, worldwide.', c: BLUE, sub: 'one public URL' },
+    { t: 'Any phone', d: 'Open the link or scan the QR — then add to home screen.', c: GREEN, sub: HOST },
   ];
   nodes.forEach((n, i) => {
     const x = xs[i];
@@ -305,14 +318,13 @@ function browser(s, x, y, w, h, url) {
     s.addText(String(i + 1), { x: x + cw / 2 - 0.45, y: cy + 0.35, w: 0.9, h: 0.9, margin: 0, fontFace: FONT, fontSize: 30, bold: true, color: WHITE, align: 'center', valign: 'middle' });
     s.addText(n.t, { x: x + 0.2, y: cy + 1.35, w: cw - 0.4, h: 0.4, margin: 0, fontFace: FONT, fontSize: 17, bold: true, color: INK, align: 'center' });
     s.addText(n.d, { x: x + 0.25, y: cy + 1.75, w: cw - 0.5, h: 0.55, margin: 0, fontFace: FONT, fontSize: 12.5, color: MUTED, align: 'center', valign: 'top' });
-    s.addText(n.sub, { x: x + 0.2, y: cy + 2.32, w: cw - 0.4, h: 0.3, margin: 0, fontFace: MONO, fontSize: 10.5, color: n.c, align: 'center', bold: true });
+    s.addText(n.sub, { x: x + 0.15, y: cy + 2.34, w: cw - 0.3, h: 0.3, margin: 0, fontFace: MONO, fontSize: 9.5, color: n.c, align: 'center', bold: true });
   });
-  // arrows
   [[xs[0] + cw, xs[1]], [xs[1] + cw, xs[2]]].forEach(([x1, x2]) => {
     s.addShape(pres.shapes.LINE, { x: x1 + 0.08, y: cy + ch / 2, w: x2 - x1 - 0.16, h: 0, line: { color: FAINT, width: 2, endArrowType: 'triangle' } });
   });
 
-  s.addText('The laptop is the single source of truth — limits are checked there, for every request, from every device.', { x: MX, y: cy + ch + 0.5, w: CW, h: 0.5, margin: 0, fontFace: FONT, fontSize: 13.5, italic: true, color: MUTED, align: 'center' });
+  s.addText('The cloud is the single source of truth — limits are checked there, for every request, from any device, anywhere.', { x: MX, y: cy + ch + 0.5, w: CW, h: 0.5, margin: 0, fontFace: FONT, fontSize: 13.5, italic: true, color: MUTED, align: 'center' });
   footer(s);
 })();
 
@@ -324,75 +336,38 @@ function browser(s, x, y, w, h, url) {
   s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 0.22, h: H, fill: { color: BLUE }, line: { type: 'none' } });
   s.addText('PART 1', { x: MX, y: 1.7, w: 6, h: 0.5, margin: 0, fontFace: FONT, fontSize: 16, bold: true, color: '6FA0FF', charSpacing: 5 });
   s.addText('For Administrators', { x: MX, y: 2.2, w: 9, h: 1.0, margin: 0, fontFace: FONT, fontSize: 46, bold: true, color: WHITE });
-  s.addText('Run the system in five simple steps.', { x: MX, y: 3.35, w: 9, h: 0.5, margin: 0, fontFace: FONT, fontSize: 18, color: 'CFDBF2' });
+  s.addText('Run the system from any browser — organizers and catering staff.', { x: MX, y: 3.35, w: 9.5, h: 0.5, margin: 0, fontFace: FONT, fontSize: 18, color: 'CFDBF2' });
 
-  const steps = ['Start the server', 'Open the dashboard', 'Watch the analytics', 'Manage the content', 'Share the link'];
+  const steps = ['Open the dashboard', 'Analytics & export', 'Redeem at counter', 'Manage content', 'Share the QR'];
   steps.forEach((t, i) => {
-    const y = 4.5 + i * 0.0;
     const x = MX + i * 2.42;
     s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 4.5, w: 2.25, h: 0.95, rectRadius: 0.12, fill: { color: '17305A' }, line: { type: 'none' } });
     s.addText(String(i + 1), { x: x + 0.18, y: 4.62, w: 0.7, h: 0.7, margin: 0, fontFace: FONT, fontSize: 26, bold: true, color: BLUE, align: 'left' });
-    s.addText(t, { x: x + 0.18, y: 4.6, w: 1.95, h: 0.75, margin: 0, fontFace: FONT, fontSize: 11, bold: true, color: 'E7EEFB', align: 'right', valign: 'middle' });
+    s.addText(t, { x: x + 0.18, y: 4.6, w: 1.95, h: 0.75, margin: 0, fontFace: FONT, fontSize: 10.5, bold: true, color: 'E7EEFB', align: 'right', valign: 'middle' });
   });
   footer(s, true);
 })();
 
 // =============================================================================
-// SLIDE 5 — Admin Step 1: Start the server
+// SLIDE 5 — Admin Step 1: Open the dashboard
 // =============================================================================
 (() => {
   const s = slideLight();
   stepBadge(s, 1, MX, 0.6, BLUE);
-  title(s, 'Start the server', INK, MX + 0.85, 0.62, 8);
+  title(s, 'Open the Admin Dashboard', INK, MX + 0.85, 0.62, 9);
   s.addText('Step 1 of 5  ·  Administrators', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
 
-  bullets(s, [
-    { text: 'Double-click start.bat (Windows).', bold: true },
-    'No installation needed — a self-contained Node.js is bundled in the folder.',
-    'A console window opens and prints the addresses to use.',
-    'Keep this window open during the event — closing it stops the server.',
-  ], MX, 2.05, 5.9, 3.0, { fontSize: 14.5, gap: 12 });
-
-  pill(s, 'Also works with  npm start  if you install Node yourself', MX, 5.25, 5.7, 0.5, BLUE_SOFT, BLUE, 11.5);
-
-  // terminal mock
-  const tx = 6.95, tw = CW - (tx - MX), ty = 2.0, th = 3.55;
-  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: tx, y: ty, w: tw, h: th, rectRadius: 0.12, fill: { color: '0B1A33' }, line: { type: 'none' }, shadow: shadow() });
-  ['F96167', 'F9C23C', '3FBF6A'].forEach((c, i) => s.addShape(pres.shapes.OVAL, { x: tx + 0.25 + i * 0.25, y: ty + 0.22, w: 0.14, h: 0.14, fill: { color: c }, line: { type: 'none' } }));
-  s.addText('Command Prompt', { x: tx, y: ty + 0.13, w: tw, h: 0.3, margin: 0, fontFace: FONT, fontSize: 10, color: DARKMUTED, align: 'center' });
-  s.addText([
-    { text: '========================================', options: { color: '4D6699', breakLine: true } },
-    { text: 'AFC Asian Cup 2027 | Media Hub - running', options: { color: 'FFFFFF', bold: true, breakLine: true } },
-    { text: '========================================', options: { color: '4D6699', breakLine: true } },
-    { text: 'Client app   -> http://localhost:3000', options: { color: '7FE8B6', breakLine: true } },
-    { text: 'Admin panel  -> http://localhost:3000/admin', options: { color: '7FE8B6', breakLine: true } },
-    { text: 'On phones    -> http://10.0.34.23:3000', options: { color: '6FA0FF', breakLine: true } },
-    { text: ' ', options: { breakLine: true } },
-    { text: 'Admin key: "afc2027-media"', options: { color: 'F9C23C' } },
-  ], { x: tx + 0.3, y: ty + 0.62, w: tw - 0.6, h: th - 0.85, margin: 0, fontFace: MONO, fontSize: 11.5, valign: 'top', align: 'left', lineSpacingMultiple: 1.45 });
-  footer(s);
-})();
-
-// =============================================================================
-// SLIDE 6 — Admin Step 2: Log in
-// =============================================================================
-(() => {
-  const s = slideLight();
-  stepBadge(s, 2, MX, 0.6, BLUE);
-  title(s, 'Open the Admin Dashboard', INK, MX + 0.85, 0.62, 9);
-  s.addText('Step 2 of 5  ·  Administrators', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
-
   numberedList(s, [
-    { h: 'Go to the admin URL', d: 'On the laptop, open  http://localhost:3000/admin' },
-    { h: 'Enter the admin key', d: 'Default:  afc2027-media' },
-    { h: 'Change the key anytime', d: 'Set the ADMIN_KEY value before starting the server.' },
-  ], MX, 2.1, 5.9, { color: BLUE, rowH: 1.0 });
+    { h: 'Go to the admin URL', d: 'On any phone or laptop, open  ' + HOST + '/admin' },
+    { h: 'Enter your admin key', d: 'The private key set when the app was deployed.' },
+    { h: 'You’re in', d: 'The key is remembered for the browser session. Tap Lock to sign out.' },
+  ], MX, 2.05, 6.0, { color: BLUE, rowH: 1.05 });
 
-  pill(s, 'The key is remembered only for that browser session', MX, 5.2, 5.7, 0.5, BLUE_SOFT, BLUE, 11.5);
+  pill(s, 'Works from anywhere — no venue Wi-Fi required', MX, 5.35, 5.7, 0.5, BLUE_SOFT, BLUE, 11.5);
 
   // login mock in browser
   const bx = 7.0, bw = CW - (bx - MX);
-  const r = browser(s, bx, 2.0, bw, 3.4, 'localhost:3000/admin');
+  const r = browser(s, bx, 2.0, bw, 3.4, HOST + '/admin');
   const fx = r.x + (r.w - 3.0) / 2;
   s.addShape(pres.shapes.OVAL, { x: fx + 1.25, y: r.y + 0.3, w: 0.6, h: 0.6, fill: { color: NAVY }, line: { type: 'none' } });
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: fx + 1.45, y: r.y + 0.5, w: 0.2, h: 0.18, rectRadius: 0.03, fill: { color: WHITE }, line: { type: 'none' } });
@@ -405,36 +380,33 @@ function browser(s, x, y, w, h, url) {
 })();
 
 // =============================================================================
-// SLIDE 7 — Admin Step 3: Analytics
+// SLIDE 6 — Admin Step 2: Analytics & CSV export
 // =============================================================================
 (() => {
   const s = slideLight();
-  stepBadge(s, 3, MX, 0.6, BLUE);
-  title(s, 'Watch vouchers in real time', INK, MX + 0.85, 0.62, 9);
-  s.addText('Step 3 of 5  ·  Administrators', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
+  stepBadge(s, 2, MX, 0.6, BLUE);
+  title(s, 'Monitor & export in real time', INK, MX + 0.85, 0.62, 9);
+  s.addText('Step 2 of 5  ·  Administrators', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
 
   bullets(s, [
     { text: 'Counters', bold: true },
-    'Total issued, issued today, registered media, stadium meals.',
-    { text: 'Charts', bold: true },
-    'Breakdown by meal type and by location.',
-    { text: 'Live feed', bold: true },
-    'Recently issued vouchers — auto-refreshes every 5 seconds.',
-  ], MX, 2.05, 4.7, 3.2, { fontSize: 13.5, gap: 7 });
+    'Issued today, redeemed today, registered media, café meals.',
+    { text: 'Charts & live feed', bold: true },
+    'Breakdown by meal/venue; vouchers as they’re claimed or scanned (auto-refresh 5s).',
+    { text: 'Export to CSV', bold: true },
+    'Download the full voucher log for catering reconciliation.',
+  ], MX, 2.05, 4.7, 3.2, { fontSize: 13, gap: 6 });
 
-  // browser with metric callouts + chart
   const bx = 5.7, bw = CW - (bx - MX);
-  const r = browser(s, bx, 1.95, bw, 3.6, 'localhost:3000/admin');
-  // two metric callouts
+  const r = browser(s, bx, 1.95, bw, 3.6, HOST + '/admin');
   const mcw = (r.w - 0.6) / 2;
-  [['7', 'Issued today', BLUE], ['5', 'Registered media', PURPLE]].forEach((m, i) => {
+  [['142', 'Issued today', BLUE], ['96', 'Redeemed today', GREEN]].forEach((m, i) => {
     const mx = r.x + 0.2 + i * (mcw + 0.2);
     card(s, mx, r.y + 0.15, mcw, 0.85, { shadow: false, fill: PANEL, lineColor: LINE });
     s.addText(m[0], { x: mx + 0.2, y: r.y + 0.2, w: mcw - 0.4, h: 0.55, margin: 0, fontFace: FONT, fontSize: 30, bold: true, color: m[2], valign: 'middle' });
     s.addText(m[1], { x: mx + 0.2, y: r.y + 0.62, w: mcw - 0.4, h: 0.25, margin: 0, fontFace: FONT, fontSize: 10, color: MUTED });
   });
-  // native bar chart
-  s.addChart(pres.charts.BAR, [{ name: 'Vouchers', labels: ['Lunch', 'Dinner', 'Stadium'], values: [5, 1, 1] }], {
+  s.addChart(pres.charts.BAR, [{ name: 'Vouchers', labels: ['Lunch', 'Dinner', 'Stadium'], values: [78, 41, 23] }], {
     x: r.x + 0.15, y: r.y + 1.15, w: r.w - 0.3, h: r.h - 1.3, barDir: 'col',
     chartColors: [BLUE, NAVY, PURPLE], showValue: true, dataLabelColor: INK, dataLabelFontSize: 10,
     catAxisLabelColor: MUTED, valAxisHidden: true, valGridLine: { style: 'none' }, catGridLine: { style: 'none' },
@@ -444,66 +416,93 @@ function browser(s, x, y, w, h, url) {
 })();
 
 // =============================================================================
-// SLIDE 8 — Admin Step 4: CMS
+// SLIDE 7 — Admin Step 3: Catering Redeemer
 // =============================================================================
 (() => {
   const s = slideLight();
-  stepBadge(s, 4, MX, 0.6, BLUE);
-  title(s, 'Publish news & press conferences', INK, MX + 0.85, 0.62, 11);
-  s.addText('Step 4 of 5  ·  Administrators', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
+  stepBadge(s, 3, MX, 0.6, BLUE);
+  title(s, 'Redeem vouchers at the counter', INK, MX + 0.85, 0.62, 10);
+  s.addText('Step 3 of 5  ·  Administrators  ·  the Redeemer tab', { x: MX + 0.85, y: 1.28, w: 10, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
 
-  const cy = 2.05, ch = 2.95, cw = 5.85, gap = CW - cw * 2;
-  // News
-  card(s, MX, cy, cw, ch);
-  pill(s, 'News Manager', MX + 0.3, cy + 0.28, 2.2, 0.45, BLUE_SOFT, BLUE, 12.5);
-  bullets(s, [
-    'Add, edit or delete updates.',
-    'Choose a category (Alert, Transport, Catering…).',
-    'Optionally Pin an item to the top.',
-    'Appears instantly in the client News tab.',
-  ], MX + 0.35, cy + 0.95, cw - 0.7, 1.9, { fontSize: 13.5, gap: 9 });
+  numberedList(s, [
+    { h: 'Open the Redeemer tab', d: 'Designed for catering staff at the buffet.' },
+    { h: 'Scan the QR or type the ID', d: 'Use the device camera, or enter the Voucher ID by hand.' },
+    { h: 'Read the result', d: 'Valid vouchers are marked Redeemed instantly.' },
+  ], MX, 2.05, 6.0, { color: BLUE, rowH: 1.0 });
 
-  // Press
-  const ax = MX + cw + gap;
-  card(s, ax, cy, cw, ch);
-  pill(s, 'Press Manager', ax + 0.3, cy + 0.28, 2.3, 0.45, BLUE_SOFT, BLUE, 12.5);
-  bullets(s, [
-    'Add or update conferences.',
-    'Set date, time, team and room.',
-    'Set status: Scheduled · Live · Delayed · Concluded.',
-    'Shows on the client Press tab with a status badge.',
-  ], ax + 0.35, cy + 0.95, cw - 0.7, 1.9, { fontSize: 13.5, gap: 9 });
+  // result cards (success + already redeemed)
+  const rx = 7.1, rw = CW - (rx - MX);
+  // success
+  card(s, rx, 2.0, rw, 1.55, { fill: GREEN_SOFT, lineColor: 'BCE6CC' });
+  s.addShape(pres.shapes.OVAL, { x: rx + 0.3, y: 2.45, w: 0.65, h: 0.65, fill: { color: GREEN }, line: { type: 'none' } });
+  s.addText('✓', { x: rx + 0.3, y: 2.43, w: 0.65, h: 0.65, margin: 0, fontFace: FONT, fontSize: 26, bold: true, color: WHITE, align: 'center', valign: 'middle' });
+  s.addText('SUCCESS — MEAL VALID', { x: rx + 1.1, y: 2.3, w: rw - 1.3, h: 0.4, margin: 0, fontFace: FONT, fontSize: 17, bold: true, color: '0C6E3A', valign: 'middle' });
+  s.addText('Marked Redeemed · MMC · Lunch', { x: rx + 1.1, y: 2.78, w: rw - 1.3, h: 0.4, margin: 0, fontFace: FONT, fontSize: 12, color: '0C6E3A' });
+  // already redeemed
+  card(s, rx, 3.75, rw, 1.55, { fill: RED_SOFT, lineColor: 'F3C4C4' });
+  s.addShape(pres.shapes.OVAL, { x: rx + 0.3, y: 4.2, w: 0.65, h: 0.65, fill: { color: RED }, line: { type: 'none' } });
+  s.addText('!', { x: rx + 0.3, y: 4.18, w: 0.65, h: 0.65, margin: 0, fontFace: FONT, fontSize: 26, bold: true, color: WHITE, align: 'center', valign: 'middle' });
+  s.addText('WARNING — ALREADY REDEEMED', { x: rx + 1.1, y: 4.05, w: rw - 1.3, h: 0.4, margin: 0, fontFace: FONT, fontSize: 15.5, bold: true, color: '9D1C1C', valign: 'middle' });
+  s.addText('Shows the original redemption time', { x: rx + 1.1, y: 4.53, w: rw - 1.3, h: 0.4, margin: 0, fontFace: FONT, fontSize: 12, color: '9D1C1C' });
 
-  card(s, MX, cy + ch + 0.2, CW, 0.7, { fill: PANEL, shadow: false });
-  s.addText([
-    { text: 'Saved to the server. ', options: { bold: true, color: INK, fontSize: 13 } },
-    { text: 'Every phone sees the change on its next refresh.', options: { color: MUTED, fontSize: 13 } },
-  ], { x: MX + 0.35, y: cy + ch + 0.2, w: CW - 0.7, h: 0.7, margin: 0, fontFace: FONT, valign: 'middle' });
+  pill(s, 'Camera scanning works great on Android Chrome — manual entry always available', MX, 5.45, 6.2, 0.5, BLUE_SOFT, BLUE, 10.5);
   footer(s);
 })();
 
 // =============================================================================
-// SLIDE 9 — Admin Step 5: Share the link
+// SLIDE 8 — Admin Step 4: Manage all content
+// =============================================================================
+(() => {
+  const s = slideLight();
+  stepBadge(s, 4, MX, 0.6, BLUE);
+  title(s, 'Manage every piece of content', INK, MX + 0.85, 0.62, 11);
+  s.addText('Step 4 of 5  ·  Administrators', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
+
+  const mgrs = [
+    { h: 'Venue Manager', d: 'Add/edit/delete venues. Type sets the rules: MMC = Lunch + Dinner; Stadium = 1 café meal; Training = no meals.', c: PURPLE, cs: PURPLE_SOFT },
+    { h: 'Transport Manager', d: 'Shuttle routes, times and frequencies — MMC ⇄ stadiums and training sites.', c: GREEN, cs: GREEN_SOFT },
+    { h: 'News Manager', d: 'Alerts and updates with categories (Alert, Transport, Catering…) and a “pin to top”.', c: AMBER, cs: AMBER_SOFT },
+    { h: 'Press Manager', d: 'Conferences with date, time, room and a live status badge.', c: BLUE, cs: BLUE_SOFT },
+  ];
+  const cw = (CW - 0.3) / 2, ch = 1.45;
+  mgrs.forEach((m, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = MX + col * (cw + 0.3), y = 2.05 + row * (ch + 0.3);
+    card(s, x, y, cw, ch, { lineColor: m.cs });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w: 0.16, h: ch, rectRadius: 0.05, fill: { color: m.c }, line: { type: 'none' } });
+    s.addText(m.h, { x: x + 0.4, y: y + 0.22, w: cw - 0.6, h: 0.4, margin: 0, fontFace: FONT, fontSize: 16, bold: true, color: INK, valign: 'middle' });
+    s.addText(m.d, { x: x + 0.4, y: y + 0.68, w: cw - 0.65, h: 0.7, margin: 0, fontFace: FONT, fontSize: 12, color: MUTED, valign: 'top' });
+  });
+
+  card(s, MX, 2.05 + 2 * (ch + 0.3) - 0.02, CW, 0.62, { fill: PANEL, shadow: false });
+  s.addText([
+    { text: 'Saved to the cloud. ', options: { bold: true, color: INK, fontSize: 13 } },
+    { text: 'Every phone sees the change on its next refresh — venue changes instantly update the client’s location list.', options: { color: MUTED, fontSize: 13 } },
+  ], { x: MX + 0.35, y: 2.05 + 2 * (ch + 0.3) - 0.02, w: CW - 0.7, h: 0.62, margin: 0, fontFace: FONT, valign: 'middle' });
+  footer(s);
+})();
+
+// =============================================================================
+// SLIDE 9 — Admin Step 5: Share the QR
 // =============================================================================
 (() => {
   const s = slideLight();
   stepBadge(s, 5, MX, 0.6, BLUE);
-  title(s, 'Give clients the address', INK, MX + 0.85, 0.62, 9);
+  title(s, 'Share access with a QR code', INK, MX + 0.85, 0.62, 9);
   s.addText('Step 5 of 5  ·  Administrators', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
 
   numberedList(s, [
-    { h: 'Use the “On phones” address', d: 'From the console, e.g.  http://10.0.34.23:3000' },
-    { h: 'Make it easy to reach', d: 'Print it as a QR code or a poster at the media desk.' },
-    { h: 'First run only: allow the firewall', d: 'Tick “Private networks” on the Windows Defender prompt.' },
+    { h: 'Open the Share page', d: 'Visit  ' + HOST + '/share  (or Admin → Share QR).' },
+    { h: 'Print or display it', d: 'A ready-to-print poster with the QR and the link.' },
+    { h: 'Hand it to the media', d: 'Works on cellular and any Wi-Fi — anyone, anywhere.' },
   ], MX, 2.1, 6.4, { color: BLUE, rowH: 1.05 });
 
-  // poster mock with QR
   const px = 8.4, pw = CW - (px - MX), py = 2.0, ph = 3.5;
   card(s, px, py, pw, ph);
   s.addText('Scan to open', { x: px, y: py + 0.25, w: pw, h: 0.4, margin: 0, fontFace: FONT, fontSize: 16, bold: true, color: INK, align: 'center' });
   s.addText('the Media Hub', { x: px, y: py + 0.6, w: pw, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: MUTED, align: 'center' });
   drawQR(s, px + pw / 2 - 0.9, py + 1.05, 1.8, NAVY);
-  pill(s, 'http://10.0.34.23:3000', px + 0.3, py + ph - 0.6, pw - 0.6, 0.42, NAVY, WHITE, 11);
+  pill(s, HOST, px + 0.25, py + ph - 0.6, pw - 0.5, 0.42, NAVY, WHITE, 10.5);
   footer(s);
 })();
 
@@ -516,12 +515,12 @@ function browser(s, x, y, w, h, url) {
   title(s, 'Tips & troubleshooting');
 
   const tips = [
-    { h: 'Keep it awake', d: 'Stop the laptop from sleeping; stay on the same Wi-Fi.' },
-    { h: 'Phone can’t connect?', d: 'Re-check the firewall — allow Node on Private networks.' },
-    { h: 'Back up your data', d: 'Copy data.json to keep a record of all vouchers.' },
-    { h: 'Start fresh', d: 'Run npm run reset (or delete data.json) to clear & re-seed.' },
-    { h: 'Change the admin key', d: 'Set ADMIN_KEY before starting the server.' },
-    { h: 'Change the port', d: 'Set PORT (the default is 3000).' },
+    { h: 'Change the admin key', d: 'Edit ADMIN_KEY in the host’s Environment settings.' },
+    { h: 'First hit may be slow', d: 'Free tier sleeps when idle; it wakes in ~50 seconds.' },
+    { h: 'Back up regularly', d: 'Use Export to CSV for a record of all vouchers.' },
+    { h: 'Data is safe', d: 'Stored in PostgreSQL — survives restarts & redeploys.' },
+    { h: 'Updates auto-deploy', d: 'Pushing to the GitHub repo redeploys the site.' },
+    { h: 'Correct daily reset', d: 'Limits reset at the event’s local midnight (timezone-aware).' },
   ];
   const cw = (CW - 0.6) / 3, ch = 1.7, gx = 0.3, gy = 0.35;
   tips.forEach((t, i) => {
@@ -544,9 +543,9 @@ function browser(s, x, y, w, h, url) {
   s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 0.22, h: H, fill: { color: GREEN }, line: { type: 'none' } });
   s.addText('PART 2', { x: MX, y: 1.7, w: 6, h: 0.5, margin: 0, fontFace: FONT, fontSize: 16, bold: true, color: '6BE0AE', charSpacing: 5 });
   s.addText('For Media Clients', { x: MX, y: 2.2, w: 9, h: 1.0, margin: 0, fontFace: FONT, fontSize: 46, bold: true, color: WHITE });
-  s.addText('Get it on your phone in under a minute.', { x: MX, y: 3.35, w: 9, h: 0.5, margin: 0, fontFace: FONT, fontSize: 18, color: 'CFE8DC' });
+  s.addText('Get it on your phone in under a minute — from anywhere.', { x: MX, y: 3.35, w: 9.5, h: 0.5, margin: 0, fontFace: FONT, fontSize: 18, color: 'CFE8DC' });
 
-  const steps = ['Join the Wi-Fi', 'Open the link', 'Add to Home Screen', 'Request a voucher', 'Explore the hub'];
+  const steps = ['Open the link', 'Add to Home Screen', 'Request a voucher', 'Find it anytime', 'Explore the hub'];
   steps.forEach((t, i) => {
     const x = MX + i * 2.42;
     s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 4.5, w: 2.25, h: 0.95, rectRadius: 0.12, fill: { color: '143E30' }, line: { type: 'none' } });
@@ -557,65 +556,36 @@ function browser(s, x, y, w, h, url) {
 })();
 
 // =============================================================================
-// SLIDE 12 — Client Step 1: Wi-Fi
+// SLIDE 12 — Client Step 1: Open the link
 // =============================================================================
 (() => {
   const s = slideLight();
   stepBadge(s, 1, MX, 0.6, GREEN);
-  title(s, 'Connect to the event Wi-Fi', INK, MX + 0.85, 0.62, 9);
+  title(s, 'Open the Media Hub', INK, MX + 0.85, 0.62, 9);
   s.addText('Step 1 of 5  ·  Media Clients', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
 
-  bullets(s, [
-    { text: 'Join the same Wi-Fi network as the media desk.', bold: true },
-    'Ask the media desk for the network name if needed.',
-    'No mobile data required — everything runs locally at the venue.',
-  ], MX, 2.2, 6.5, 2.5, { fontSize: 15, gap: 12 });
-
-  pill(s, 'Same Wi-Fi as the laptop = you’re good to go', MX, 4.7, 5.5, 0.5, GREEN_SOFT, GREEN, 11.5);
-
-  // phone with wifi settings row
-  const r = phone(s, 9.6, 1.7, 2.4, 4.5);
-  screenBar(s, r, 'Wi-Fi', NAVY);
-  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: r.x + 0.18, y: r.y + 0.8, w: r.w - 0.36, h: 0.7, rectRadius: 0.1, fill: { color: GREEN_SOFT }, line: { type: 'none' } });
-  s.addText('AFC-Media-WiFi', { x: r.x + 0.32, y: r.y + 0.8, w: r.w - 0.9, h: 0.7, margin: 0, fontFace: FONT, fontSize: 11, bold: true, color: INK, valign: 'middle' });
-  s.addShape(pres.shapes.OVAL, { x: r.x + r.w - 0.6, y: r.y + 1.05, w: 0.28, h: 0.28, fill: { color: GREEN }, line: { type: 'none' } });
-  s.addText('Connected', { x: r.x + 0.32, y: r.y + 1.55, w: r.w - 0.6, h: 0.3, margin: 0, fontFace: FONT, fontSize: 9, color: GREEN, bold: true });
-  for (let i = 0; i < 3; i++) lineRow(s, r.x + 0.18, r.y + 2.15 + i * 0.45, r.w - 0.36, 0.26, PANEL);
-  footer(s);
-})();
-
-// =============================================================================
-// SLIDE 13 — Client Step 2: Open the link
-// =============================================================================
-(() => {
-  const s = slideLight();
-  stepBadge(s, 2, MX, 0.6, GREEN);
-  title(s, 'Open the Media Hub link', INK, MX + 0.85, 0.62, 9);
-  s.addText('Step 2 of 5  ·  Media Clients', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
-
   numberedList(s, [
-    { h: 'Open your browser', d: 'Safari (iPhone) or Chrome (Android).' },
-    { h: 'Type the address', d: 'The one on the media-desk poster, e.g.  http://10.0.34.23:3000' },
-    { h: 'Or scan the QR code', d: 'Point your camera at the poster — tap the link.' },
+    { h: 'Scan the QR code', d: 'Point your phone camera at the media-desk poster — tap the link.' },
+    { h: 'Or type the address', d: HOST },
+    { h: 'Any network works', d: 'Mobile data (4G/5G) or any Wi-Fi — no special network needed.' },
   ], MX, 2.1, 6.4, { color: GREEN, rowH: 1.05 });
 
-  // QR + phone
   const px = 8.5, pw = CW - (px - MX);
   card(s, px, 2.0, pw, 3.5);
   s.addText('Scan to open', { x: px, y: 2.25, w: pw, h: 0.35, margin: 0, fontFace: FONT, fontSize: 15, bold: true, color: INK, align: 'center' });
   drawQR(s, px + pw / 2 - 0.85, 2.75, 1.7, GREEN);
-  pill(s, 'http://10.0.34.23:3000', px + 0.3, 4.75, pw - 0.6, 0.42, GREEN, WHITE, 11);
+  pill(s, HOST, px + 0.25, 4.75, pw - 0.5, 0.42, GREEN, WHITE, 10.5);
   footer(s);
 })();
 
 // =============================================================================
-// SLIDE 14 — Client Step 3: Add to Home Screen
+// SLIDE 13 — Client Step 2: Add to Home Screen
 // =============================================================================
 (() => {
   const s = slideLight();
-  stepBadge(s, 3, MX, 0.6, GREEN);
+  stepBadge(s, 2, MX, 0.6, GREEN);
   title(s, 'Add it to your home screen', INK, MX + 0.85, 0.62, 10);
-  s.addText('Step 3 of 5  ·  Media Clients  ·  it then opens like an app, full-screen', { x: MX + 0.85, y: 1.28, w: 10, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
+  s.addText('Step 2 of 5  ·  Media Clients  ·  it then opens like an app, full-screen', { x: MX + 0.85, y: 1.28, w: 10, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
 
   const cy = 2.05, ch = 3.4, cw = 5.85, gap = CW - cw * 2;
   // iPhone
@@ -626,9 +596,8 @@ function browser(s, x, y, w, h, url) {
     { h: 'Tap “Add to Home Screen”', d: 'Scroll the share sheet to find it.' },
     { h: 'Tap “Add”', d: 'An icon appears on your home screen.' },
   ], MX + 0.35, cy + 1.0, cw - 1.9, { color: GREEN, rowH: 0.75 });
-  // mini phone w/ icon
   const r1 = phone(s, MX + cw - 1.35, cy + 1.0, 1.05, 2.1);
-  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: r1.x + r1.w / 2 - 0.25, y: r1.y + 0.4, w: 0.5, h: 0.5, rectRadius: 0.12, fill: { color: GREEN }, line: { type: 'none' } });
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: r1.x + r1.w / 2 - 0.25, y: r1.y + 0.4, w: 0.5, h: 0.5, rectRadius: 0.12, fill: { color: BLUE }, line: { type: 'none' } });
   s.addText('Hub', { x: r1.x, y: r1.y + 0.95, w: r1.w, h: 0.2, margin: 0, fontFace: FONT, fontSize: 7, color: INK, align: 'center' });
 
   // Android
@@ -641,38 +610,70 @@ function browser(s, x, y, w, h, url) {
     { h: 'Tap “Add” / “Install”', d: 'An icon appears in your app drawer.' },
   ], ax + 0.35, cy + 1.0, cw - 1.9, { color: GREEN, rowH: 0.75 });
   const r2 = phone(s, ax + cw - 1.35, cy + 1.0, 1.05, 2.1);
-  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: r2.x + r2.w / 2 - 0.25, y: r2.y + 0.4, w: 0.5, h: 0.5, rectRadius: 0.12, fill: { color: GREEN }, line: { type: 'none' } });
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: r2.x + r2.w / 2 - 0.25, y: r2.y + 0.4, w: 0.5, h: 0.5, rectRadius: 0.12, fill: { color: BLUE }, line: { type: 'none' } });
   s.addText('Hub', { x: r2.x, y: r2.y + 0.95, w: r2.w, h: 0.2, margin: 0, fontFace: FONT, fontSize: 7, color: INK, align: 'center' });
   footer(s);
 })();
 
 // =============================================================================
-// SLIDE 15 — Client Step 4: Request a voucher
+// SLIDE 14 — Client Step 3: Request a voucher
 // =============================================================================
 (() => {
   const s = slideLight();
-  stepBadge(s, 4, MX, 0.6, GREEN);
+  stepBadge(s, 3, MX, 0.6, GREEN);
   title(s, 'Request a meal voucher', INK, MX + 0.85, 0.62, 9);
-  s.addText('Step 4 of 5  ·  Media Clients', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
+  s.addText('Step 3 of 5  ·  Media Clients', { x: MX + 0.85, y: 1.28, w: 8, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
 
   numberedList(s, [
-    { h: 'Enter your email', d: 'First time only: add your accreditation number — it’s linked for next time.' },
+    { h: 'Enter your email', d: 'First time only: add your accreditation number — linked for next time.' },
     { h: 'Pick location & meal', d: 'Choose the venue, then Lunch / Dinner (or the stadium meal).' },
-    { h: 'Tap “Generate Voucher”', d: 'Show the QR ticket at the counter.' },
+    { h: 'Tap “Generate Voucher”', d: 'Get a QR ticket; the badge flips to “Redeemed” when scanned.' },
   ], MX, 2.1, 6.6, { color: GREEN, rowH: 1.1 });
 
   pill(s, 'Returning? Just your email — no need to re-enter accreditation', MX, 5.45, 6.5, 0.5, GREEN_SOFT, GREEN, 11.5);
 
-  // phone with voucher ticket
   const r = phone(s, 9.5, 1.6, 2.5, 4.7);
-  // ticket header
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: r.x + 0.12, y: r.y + 0.15, w: r.w - 0.24, h: 0.85, rectRadius: 0.1, fill: { color: NAVY }, line: { type: 'none' } });
   s.addText('MMC · LUNCH', { x: r.x + 0.28, y: r.y + 0.25, w: r.w - 0.5, h: 0.3, margin: 0, fontFace: FONT, fontSize: 10, bold: true, color: WHITE });
-  pill(s, 'VALID', r.x + r.w - 0.95, r.y + 0.32, 0.7, 0.3, '1C3A6B', WHITE, 8);
+  pill(s, 'PENDING', r.x + r.w - 1.05, r.y + 0.32, 0.8, 0.3, '1C3A6B', WHITE, 7.5);
   s.addText('Voucher', { x: r.x + 0.28, y: r.y + 0.55, w: r.w - 0.5, h: 0.3, margin: 0, fontFace: FONT, fontSize: 13, bold: true, color: WHITE });
   drawQR(s, r.x + r.w / 2 - 0.7, r.y + 1.2, 1.4, NAVY);
   s.addText('MV-3LWU13', { x: r.x + 0.2, y: r.y + 2.75, w: r.w - 0.4, h: 0.25, margin: 0, fontFace: MONO, fontSize: 9, color: INK, align: 'center', bold: true });
   for (let i = 0; i < 2; i++) lineRow(s, r.x + 0.35, r.y + 3.15 + i * 0.32, r.w - 0.7, 0.2, PANEL);
+  bottomNav(s, r, 0);
+  footer(s);
+})();
+
+// =============================================================================
+// SLIDE 15 — Client Step 4: Vouchers stay all day
+// =============================================================================
+(() => {
+  const s = slideLight();
+  stepBadge(s, 4, MX, 0.6, GREEN);
+  title(s, 'Your vouchers stay all day', INK, MX + 0.85, 0.62, 10);
+  s.addText('Step 4 of 5  ·  Media Clients  ·  retrieve them anytime', { x: MX + 0.85, y: 1.28, w: 10, h: 0.3, margin: 0, fontFace: FONT, fontSize: 12, color: FAINT });
+
+  bullets(s, [
+    { text: 'Saved automatically.', bold: true },
+    'Every voucher you generate today appears under “Your vouchers — today”.',
+    { text: 'Reopen any time.', bold: true },
+    'Tap a voucher to show its QR again at the counter — until local midnight.',
+    { text: 'On any device, even offline.', bold: true },
+    'Just enter your email on another phone; cached on-device for poor signal.',
+  ], MX, 2.1, 6.4, 3.2, { fontSize: 13, gap: 6 });
+
+  // phone showing saved vouchers list
+  const r = phone(s, 9.5, 1.6, 2.5, 4.7);
+  screenBar(s, r, 'Your vouchers — today', NAVY);
+  const rowsY = r.y + 0.75;
+  const items = [['Stadium Meal', GREEN], ['Dinner · MMC', AMBER], ['Lunch · MMC', GREEN]];
+  items.forEach((it, i) => {
+    const y = rowsY + i * 0.78;
+    card(s, r.x + 0.16, y, r.w - 0.32, 0.66, { shadow: false, fill: PANEL, lineColor: LINE, radius: 0.08 });
+    drawQR(s, r.x + 0.26, y + 0.1, 0.46, NAVY);
+    s.addText(it[0], { x: r.x + 0.82, y: y + 0.1, w: r.w - 1.4, h: 0.25, margin: 0, fontFace: FONT, fontSize: 8.5, bold: true, color: INK, valign: 'middle' });
+    pill(s, i === 2 ? 'Redeemed' : 'Pending', r.x + 0.82, y + 0.34, 0.9, 0.22, i === 2 ? GREEN_SOFT : AMBER_SOFT, i === 2 ? GREEN : AMBER, 6.5);
+  });
   bottomNav(s, r, 0);
   footer(s);
 })();
@@ -703,7 +704,6 @@ function browser(s, x, y, w, h, url) {
     s.addText(t.d, { x: x + 0.28, y: y + 0.78, w: cw - 0.55, h: 0.55, margin: 0, fontFace: FONT, fontSize: 12, color: MUTED });
   });
 
-  // phone showing nav
   const r = phone(s, 9.6, 1.7, 2.4, 4.5);
   screenBar(s, r, 'Media Hub', NAVY);
   for (let i = 0; i < 4; i++) lineRow(s, r.x + 0.2, r.y + 0.85 + i * 0.6, r.w - 0.4, 0.4, PANEL);
@@ -720,15 +720,13 @@ function browser(s, x, y, w, h, url) {
   title(s, 'What you can claim each day');
 
   const cy = 2.1, ch = 2.9, cw = 5.85, gap = CW - cw * 2;
-  // MMC & Training
   card(s, MX, cy, cw, ch, { lineColor: BLUE_SOFT });
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: MX, y: cy, w: cw, h: 0.8, rectRadius: 0.12, fill: { color: BLUE }, line: { type: 'none' } });
   s.addShape(pres.shapes.RECTANGLE, { x: MX, y: cy + 0.4, w: cw, h: 0.4, fill: { color: BLUE }, line: { type: 'none' } });
-  s.addText('Media Centres & Training Sites', { x: MX + 0.3, y: cy, w: cw - 0.6, h: 0.8, margin: 0, fontFace: FONT, fontSize: 16, bold: true, color: WHITE, valign: 'middle' });
+  s.addText('Main Media Centre', { x: MX + 0.3, y: cy, w: cw - 0.6, h: 0.8, margin: 0, fontFace: FONT, fontSize: 16, bold: true, color: WHITE, valign: 'middle' });
   s.addText('1× Lunch  +  1× Dinner', { x: MX, y: cy + 1.1, w: cw, h: 0.7, margin: 0, fontFace: FONT, fontSize: 26, bold: true, color: INK, align: 'center' });
   s.addText('You may hold both — but not two of the same meal at the same place on the same day.', { x: MX + 0.4, y: cy + 1.95, w: cw - 0.8, h: 0.8, margin: 0, fontFace: FONT, fontSize: 12.5, color: MUTED, align: 'center' });
 
-  // Stadiums
   const ax = MX + cw + gap;
   card(s, ax, cy, cw, ch, { lineColor: PURPLE_SOFT });
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ax, y: cy, w: cw, h: 0.8, rectRadius: 0.12, fill: { color: PURPLE }, line: { type: 'none' } });
@@ -740,7 +738,7 @@ function browser(s, x, y, w, h, url) {
   card(s, MX, cy + ch + 0.2, CW, 0.7, { fill: PANEL, shadow: false });
   s.addText([
     { text: 'Per email, per day, enforced centrally. ', options: { bold: true, color: INK, fontSize: 13 } },
-    { text: 'A duplicate request shows a friendly “already claimed” message.', options: { color: MUTED, fontSize: 13 } },
+    { text: 'Training Sites are transport & info only — no meal vouchers. Limits reset at local midnight.', options: { color: MUTED, fontSize: 13 } },
   ], { x: MX + 0.35, y: cy + ch + 0.2, w: CW - 0.7, h: 0.7, margin: 0, fontFace: FONT, valign: 'middle', align: 'center' });
   footer(s);
 })();
@@ -758,22 +756,22 @@ function browser(s, x, y, w, h, url) {
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: MX, y: cy, w: cw, h: ch, rectRadius: 0.14, fill: { color: '17305A' }, line: { type: 'none' } });
   pill(s, 'Administrators', MX + 0.3, cy + 0.28, 2.3, 0.45, BLUE, WHITE, 12);
   s.addText([
-    { text: 'Start:   ', options: { color: DARKMUTED } }, { text: 'double-click start.bat\n', options: { color: WHITE, bold: true, breakLine: true } },
-    { text: 'Admin:  ', options: { color: DARKMUTED } }, { text: 'localhost:3000/admin\n', options: { color: WHITE, bold: true, breakLine: true } },
-    { text: 'Key:     ', options: { color: DARKMUTED } }, { text: 'afc2027-media\n', options: { color: WHITE, bold: true, breakLine: true } },
-    { text: 'Reset:   ', options: { color: DARKMUTED } }, { text: 'npm run reset', options: { color: WHITE, bold: true } },
-  ], { x: MX + 0.4, y: cy + 1.0, w: cw - 0.8, h: 1.9, margin: 0, fontFace: MONO, fontSize: 13.5, valign: 'top', lineSpacingMultiple: 1.3 });
+    { text: 'Admin:   ', options: { color: DARKMUTED } }, { text: HOST + '/admin\n', options: { color: WHITE, bold: true, breakLine: true } },
+    { text: 'Key:      ', options: { color: DARKMUTED } }, { text: 'your private admin key\n', options: { color: WHITE, bold: true, breakLine: true } },
+    { text: 'Redeem:  ', options: { color: DARKMUTED } }, { text: 'Redeemer tab (scan / type)\n', options: { color: WHITE, bold: true, breakLine: true } },
+    { text: 'Export:   ', options: { color: DARKMUTED } }, { text: 'Overview → Export CSV', options: { color: WHITE, bold: true } },
+  ], { x: MX + 0.4, y: cy + 1.0, w: cw - 0.8, h: 1.9, margin: 0, fontFace: MONO, fontSize: 12, valign: 'top', lineSpacingMultiple: 1.3 });
 
   // Client
   const ax = MX + cw + gap;
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ax, y: cy, w: cw, h: ch, rectRadius: 0.14, fill: { color: '143E30' }, line: { type: 'none' } });
   pill(s, 'Media Clients', ax + 0.3, cy + 0.28, 2.2, 0.45, GREEN, WHITE, 12);
   s.addText([
-    { text: 'Open:      ', options: { color: 'A9CFBF' } }, { text: 'http://<desk-IP>:3000\n', options: { color: WHITE, bold: true, breakLine: true } },
+    { text: 'Open:      ', options: { color: 'A9CFBF' } }, { text: HOST + '\n', options: { color: WHITE, bold: true, breakLine: true } },
     { text: 'Install:    ', options: { color: 'A9CFBF' } }, { text: 'Share → Add to Home Screen\n', options: { color: WHITE, bold: true, breakLine: true } },
     { text: 'First time: ', options: { color: 'A9CFBF' } }, { text: 'email + accreditation\n', options: { color: WHITE, bold: true, breakLine: true } },
-    { text: 'Then:       ', options: { color: 'A9CFBF' } }, { text: 'email only', options: { color: WHITE, bold: true } },
-  ], { x: ax + 0.4, y: cy + 1.0, w: cw - 0.8, h: 1.9, margin: 0, fontFace: MONO, fontSize: 13, valign: 'top', lineSpacingMultiple: 1.3 });
+    { text: 'Then:       ', options: { color: 'A9CFBF' } }, { text: 'email only — vouchers saved all day', options: { color: WHITE, bold: true } },
+  ], { x: ax + 0.4, y: cy + 1.0, w: cw - 0.8, h: 1.9, margin: 0, fontFace: MONO, fontSize: 11.5, valign: 'top', lineSpacingMultiple: 1.3 });
 
   s.addText('You’re ready — enjoy the tournament.', { x: MX, y: cy + ch + 0.35, w: CW, h: 0.5, margin: 0, fontFace: FONT, fontSize: 17, bold: true, italic: true, color: WHITE, align: 'center' });
   footer(s, true);

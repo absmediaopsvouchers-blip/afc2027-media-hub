@@ -7,7 +7,7 @@
  *
  * Allocation policy (enforced per Email, per Location, per calendar day):
  *
- *   • Main Media Centre (MMC) & Training Sites
+ *   • Main Media Centre (MMC)
  *       → 1 Lunch AND 1 Dinner voucher.
  *         (You may hold both, but not two of the same meal type at the same
  *          location on the same day.)
@@ -15,6 +15,10 @@
  *   • Stadiums
  *       → 1 Meal total (grants access to the venue Media Café).
  *         (No second meal of any kind at that stadium on the same day.)
+ *
+ *   • Training Sites
+ *       → NO meal vouchers. Training venues still exist for transport/info,
+ *         but are out of scope for catering — no Lunch/Dinner/Meal is offered.
  *
  * The "calendar day" is computed in the EVENT_TIMEZONE (see src/time.js), so the
  * daily reset happens at the venue's local midnight regardless of where the
@@ -30,7 +34,7 @@
 // The meal types each location type offers.
 const MEALS_BY_TYPE = {
   MMC: ['Lunch', 'Dinner'],
-  Training: ['Lunch', 'Dinner'],
+  Training: [], // Training Sites are out of scope for meals (transport/info only)
   Stadium: ['Meal'],
 };
 

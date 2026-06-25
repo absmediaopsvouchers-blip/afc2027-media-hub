@@ -477,7 +477,7 @@ async function renderVenuesMgr() {
       <h2>Venue manager</h2>
       <button class="btn btn-primary btn-sm" id="ven-add">${ICONS.plus}<span>Add venue</span></button>
     </div>
-    <p class="mgr-note">${ICONS.info}<span>A venue’s <strong>type</strong> drives the allocation rules: Media Centres &amp; Training Sites allow 1 Lunch + 1 Dinner per day; Stadiums allow 1 Media Café meal per day.</span></p>
+    <p class="mgr-note">${ICONS.info}<span>A venue’s <strong>type</strong> drives the allocation rules: Media Centres allow 1 Lunch + 1 Dinner per day; Stadiums allow 1 Media Café meal per day; Training Sites have <strong>no meal vouchers</strong> (transport &amp; info only).</span></p>
     <div id="ven-editor"></div>
     <div class="card" id="ven-list">${loadingHtml()}</div>`;
   document.getElementById('ven-add').addEventListener('click', () => openVenueEditor(null));
