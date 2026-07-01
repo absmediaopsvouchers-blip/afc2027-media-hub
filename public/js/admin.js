@@ -315,7 +315,7 @@ function renderRedeemer() {
           <div class="scanner-frame"></div>
           <button class="btn btn-ghost btn-sm scanner-stop" id="rd-stop">Stop camera</button>
         </div>
-        <p class="redeem-hint">${ICONS.info}<span>Scanning needs a device camera and a supported browser (Android Chrome works great). You can always type the ID by hand.</span></p>
+        <p class="redeem-hint">${ICONS.info}<span>Point any phone or laptop camera at the voucher QR to scan it — works across browsers. You can always type the ID by hand.</span></p>
       </div>
       <div class="card redeem-result-card" id="rd-result">
         <div class="redeem-idle">${ICONS.scan}<div>Scan or enter a voucher to begin.</div></div>
@@ -414,12 +414,15 @@ async function startScanner() {
   const wrap = document.getElementById('rd-scanner');
   if (!wrap) return;
 
-  if (!('BarcodeDetector' in window)) {
-    toast('Camera scanning isn’t supported here — please type the voucher ID.', 'error');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('No camera available here — please type the voucher ID.', 'error');
     return;
   }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    toast('No camera available — please type the voucher ID.', 'error');
+  // Native detector (Chromium) is fastest; jsQR is the cross-browser fallback
+  // (iPhone Safari, Firefox, desktop Safari…). One of them will be present.
+  const hasNative = 'BarcodeDetector' in window;
+  if (!hasNative && typeof window.jsQR !== 'function') {
+    toast('QR scanning couldn’t load — please type the voucher ID.', 'error');
     return;
   }
 
@@ -433,23 +436,39 @@ async function startScanner() {
 
   const video = document.getElementById('rd-video');
   video.srcObject = stream;
+  video.setAttribute('playsinline', '');
+  video.muted = true;
   await video.play().catch(() => {});
   wrap.classList.remove('hidden');
 
-  let detector;
-  try { detector = new BarcodeDetector({ formats: ['qr_code'] }); }
-  catch (e) { detector = new BarcodeDetector(); }
+  let detector = null;
+  if (hasNative) {
+    try { detector = new window.BarcodeDetector({ formats: ['qr_code'] }); }
+    catch (e) { try { detector = new window.BarcodeDetector(); } catch (e2) { detector = null; } }
+  }
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   const timer = setInterval(async () => {
     if (!adminState.scanner) return;
+    const v = adminState.scanner.video;
+    if (!v || !v.videoWidth) return;
+    let value = '';
     try {
-      const codes = await detector.detect(video);
-      if (codes && codes.length) {
-        const raw = codes[0].rawValue || '';
-        if (raw) { stopScanner(); doRedeem(raw); }
+      if (detector) {
+        const codes = await detector.detect(v);
+        if (codes && codes.length) value = codes[0].rawValue || '';
+      } else if (window.jsQR) {
+        canvas.width = v.videoWidth;
+        canvas.height = v.videoHeight;
+        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+        if (code && code.data) value = code.data;
       }
-    } catch (e) { /* transient detect error — keep trying */ }
-  }, 350);
+    } catch (e) { /* transient frame error — keep trying */ }
+    if (value) { stopScanner(); doRedeem(value); }
+  }, 300);
 
   adminState.scanner = { stream, video, timer };
 }
