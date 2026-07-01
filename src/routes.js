@@ -255,6 +255,10 @@ router.get('/transport', wrap(async (req, res) => {
   res.json(await store.listTransport());
 }));
 
+router.get('/categories', wrap(async (req, res) => {
+  res.json(await store.listCategories());
+}));
+
 // A shareable QR code that opens the Media Client app. The encoded URL is the
 // address the app is actually being served on (the request Host), so it works
 // both on the venue LAN and once deployed to the cloud — no hardcoding. When
@@ -495,6 +499,35 @@ router.put('/news/:id', requireAdmin, wrap(async (req, res) => {
 router.delete('/news/:id', requireAdmin, wrap(async (req, res) => {
   const ok = await store.deleteNews(req.params.id);
   if (!ok) return res.status(404).json({ error: 'News item not found.' });
+  res.json({ ok: true });
+}));
+
+// ---- Categories CMS ---------------------------------------------------------
+
+router.post('/categories', requireAdmin, wrap(async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Please enter a category name.' });
+  const item = {
+    id: uid('CAT'),
+    name,
+    color: String(req.body.color || '#5c6a7e').trim() || '#5c6a7e',
+  };
+  await store.createCategory(item);
+  res.status(201).json(item);
+}));
+
+router.put('/categories/:id', requireAdmin, wrap(async (req, res) => {
+  const fields = {};
+  if (req.body.name !== undefined) fields.name = String(req.body.name).trim();
+  if (req.body.color !== undefined) fields.color = String(req.body.color).trim();
+  const updated = await store.updateCategory(req.params.id, fields);
+  if (!updated) return res.status(404).json({ error: 'Category not found.' });
+  res.json(updated);
+}));
+
+router.delete('/categories/:id', requireAdmin, wrap(async (req, res) => {
+  const ok = await store.deleteCategory(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Category not found.' });
   res.json({ ok: true });
 }));
 

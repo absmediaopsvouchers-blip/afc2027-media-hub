@@ -15,6 +15,7 @@ const ADMIN_TABS = [
   { id: 'redeem', label: 'Redeemer' },
   { id: 'venues', label: 'Venues' },
   { id: 'news', label: 'News' },
+  { id: 'categories', label: 'Categories' },
   { id: 'press', label: 'Press' },
   { id: 'transport', label: 'Transport' },
 ];
@@ -39,6 +40,7 @@ const adminState = {
   press: [],
   venues: [],
   transport: [],
+  categories: [],
   pollTimer: null,
   scanner: null, // { stream, video, timer }
 };
@@ -139,6 +141,7 @@ function renderPanel() {
   if (adminState.tab === 'redeem') return renderRedeemer();
   if (adminState.tab === 'venues') return renderVenuesMgr();
   if (adminState.tab === 'news') return renderNewsMgr();
+  if (adminState.tab === 'categories') return renderCategoriesMgr();
   if (adminState.tab === 'press') return renderPressMgr();
   if (adminState.tab === 'transport') return renderTransportMgr();
 }
@@ -603,7 +606,10 @@ async function renderNewsMgr() {
 }
 
 async function loadNews() {
-  try { adminState.news = await API.get('/news'); }
+  try {
+    await loadCategories(); // populate the category picker + feed badge colours
+    adminState.news = await API.get('/news');
+  }
   catch (e) { const el = document.getElementById('news-list'); if (el) el.innerHTML = errorHtml(e.message); return; }
   renderNewsList();
 }
@@ -614,11 +620,10 @@ function renderNewsList() {
   const list = adminState.news;
   if (!list.length) { el.innerHTML = '<div class="empty" style="padding:28px">No news items yet.</div>'; return; }
   el.innerHTML = list.map((n) => {
-    const cat = CATEGORY_BADGE[n.category] || 'badge-gray';
     return `<div class="mgr-item">
       <div class="mgr-main">
         <div class="mgr-title">
-          <span class="badge ${cat}">${esc(n.category)}</span>
+          ${catBadge(n.category)}
           ${n.pinned ? '<span class="badge badge-amber">Pinned</span>' : ''}
           <span>${esc(n.title)}</span>
         </div>
@@ -639,14 +644,18 @@ function renderNewsList() {
 
 function openNewsEditor(item) {
   const ed = document.getElementById('news-editor');
-  const it = item || { title: '', body: '', category: 'Announcement', pinned: false };
+  const it = item || { title: '', body: '', category: (CATEGORIES[0] && CATEGORIES[0].name) || 'Announcement', pinned: false };
+  // Category options come from the managed list; keep the item's own value even
+  // if its category was later deleted.
+  const catNames = CATEGORIES.length ? CATEGORIES.map((c) => c.name) : NEWS_CATS.slice();
+  if (it.category && !catNames.includes(it.category)) catNames.unshift(it.category);
   ed.innerHTML = `
     <div class="editor">
       <div class="field"><label>Title</label>
         <input class="input" id="ne-title" value="${esc(it.title)}" placeholder="Headline"></div>
       <div class="row2">
         <div class="field"><label>Category</label>
-          <select class="select" id="ne-cat">${NEWS_CATS.map((c) => `<option ${c === it.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+          <select class="select" id="ne-cat">${catNames.map((c) => `<option ${c === it.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
         <div class="field"><label>Visibility</label>
           <div class="check-row"><input type="checkbox" id="ne-pin" ${it.pinned ? 'checked' : ''}><label for="ne-pin">Pin to top of feed</label></div></div>
       </div>
@@ -901,6 +910,109 @@ async function saveTransport(id) {
 async function deleteTransport(id) {
   if (!confirm('Delete this shuttle route?')) return;
   try { await API.del('/transport/' + id, true); toast('Deleted.', 'success'); await loadTransport(); }
+  catch (e) { handleAdminErr(e); }
+}
+
+/* =============================================================================
+   CATEGORY MANAGER
+   ========================================================================== */
+
+async function renderCategoriesMgr() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <div class="admin-head">
+      <h2>Category manager</h2>
+      <button class="btn btn-primary btn-sm" id="cat-add">${ICONS.plus}<span>Add category</span></button>
+    </div>
+    <p class="mgr-note">${ICONS.info}<span>Categories tag News posts. Create new ones any time — they show up in the News editor and are colour-coded in the client feed.</span></p>
+    <div id="cat-editor"></div>
+    <div class="card" id="cat-list">${loadingHtml()}</div>`;
+  document.getElementById('cat-add').addEventListener('click', () => openCategoryEditor(null));
+  await loadCategoriesAdmin();
+}
+
+async function loadCategoriesAdmin() {
+  try {
+    adminState.categories = await API.get('/categories');
+    CATEGORIES = adminState.categories; // keep the shared badge map in sync
+  } catch (e) {
+    const el = document.getElementById('cat-list'); if (el) el.innerHTML = errorHtml(e.message); return;
+  }
+  renderCategoryList();
+}
+
+function catChip(c) {
+  return `<span class="badge cat-badge" style="color:${esc(c.color)};background:${esc(c.color)}1f;border-color:${esc(c.color)}3d">${esc(c.name)}</span>`;
+}
+
+function renderCategoryList() {
+  const el = document.getElementById('cat-list');
+  if (!el) return;
+  const list = adminState.categories;
+  if (!list.length) { el.innerHTML = '<div class="empty" style="padding:28px">No categories yet. Add your first category.</div>'; return; }
+  el.innerHTML = list.map((c) => `
+    <div class="mgr-item">
+      <div class="mgr-main">
+        <div class="mgr-title">${catChip(c)}<span class="mono" style="color:var(--faint);font-size:.8rem">${esc(c.color)}</span></div>
+      </div>
+      <div class="mgr-actions">
+        <button class="btn btn-ghost btn-icon" title="Edit" data-edit="${esc(c.id)}">${ICONS.edit}</button>
+        <button class="btn btn-danger btn-icon" title="Delete" data-del="${esc(c.id)}">${ICONS.trash}</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit]').forEach((b) =>
+    b.addEventListener('click', () => openCategoryEditor(adminState.categories.find((c) => c.id === b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach((b) =>
+    b.addEventListener('click', () => deleteCategory(b.dataset.del)));
+}
+
+function openCategoryEditor(item) {
+  const ed = document.getElementById('cat-editor');
+  const it = item || { name: '', color: '#2f6bff' };
+  ed.innerHTML = `
+    <div class="editor">
+      <div class="row2">
+        <div class="field"><label>Name</label>
+          <input class="input" id="cat-name" value="${esc(it.name)}" placeholder="e.g. Security"></div>
+        <div class="field"><label>Colour</label>
+          <div class="color-row">
+            <input type="color" id="cat-color" value="${esc(it.color || '#2f6bff')}">
+            <input class="input mono" id="cat-color-hex" value="${esc(it.color || '#2f6bff')}" placeholder="#2f6bff">
+          </div>
+        </div>
+      </div>
+      <div class="editor-actions">
+        <button class="btn btn-ghost btn-sm" id="cat-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="cat-save">${ICONS.check}<span>${item ? 'Save changes' : 'Add category'}</span></button>
+      </div>
+    </div>`;
+  ed.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const picker = document.getElementById('cat-color');
+  const hex = document.getElementById('cat-color-hex');
+  picker.addEventListener('input', () => { hex.value = picker.value; });
+  hex.addEventListener('input', () => { if (/^#[0-9a-fA-F]{6}$/.test(hex.value)) picker.value = hex.value; });
+  document.getElementById('cat-cancel').addEventListener('click', () => { ed.innerHTML = ''; });
+  document.getElementById('cat-save').addEventListener('click', () => saveCategory(item ? item.id : null));
+  document.getElementById('cat-name').focus();
+}
+
+async function saveCategory(id) {
+  const name = val('cat-name').trim();
+  let color = val('cat-color-hex').trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) color = val('cat-color'); // fall back to the picker
+  if (!name) { toast('Please enter a category name.', 'error'); return; }
+  try {
+    if (id) await API.put('/categories/' + id, { name, color }, true);
+    else await API.post('/categories', { name, color }, true);
+    document.getElementById('cat-editor').innerHTML = '';
+    toast(id ? 'Category saved.' : 'Category added.', 'success');
+    await loadCategoriesAdmin();
+  } catch (e) { handleAdminErr(e); }
+}
+
+async function deleteCategory(id) {
+  if (!confirm('Delete this category? Existing news keeps its label but loses the colour.')) return;
+  try { await API.del('/categories/' + id, true); toast('Category deleted.', 'success'); await loadCategoriesAdmin(); }
   catch (e) { handleAdminErr(e); }
 }
 

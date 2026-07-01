@@ -130,6 +130,10 @@
 .check-row input { width: 18px; height: 18px; accent-color: var(--accent); }
 .check-row label { font-weight: 600; font-size: .9rem; }
 
+.color-row { display: flex; gap: 10px; align-items: center; }
+.color-row input[type="color"] { width: 52px; height: 44px; border: 1px solid var(--line); border-radius: 10px; background: none; padding: 2px; cursor: pointer; flex: none; }
+.color-row .input { flex: 1; }
+
 /* ---- live feed status tags ------------------------------------------------ */
 
 .feed-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }

@@ -50,6 +50,16 @@ function getSeedData() {
     // Issued vouchers (the audit trail the rules engine checks against).
     vouchers: [],
 
+    // Managed content categories (used by the News feed). Admin-editable so new
+    // categories can be added without code changes. Each has a display colour.
+    categories: [
+      { id: 'CAT-ANNOUNCE', name: 'Announcement', color: '#2f6bff' },
+      { id: 'CAT-ALERT', name: 'Alert', color: '#d12626' },
+      { id: 'CAT-OPS', name: 'Operations', color: '#5c6a7e' },
+      { id: 'CAT-TRANSPORT', name: 'Transport', color: '#138a4a' },
+      { id: 'CAT-CATERING', name: 'Catering', color: '#b9710a' },
+    ],
+
     // Venues available in the request dropdown (managed via the Admin CMS).
     locations: [
       { id: 'MMC-01', name: 'Main Media Centre', type: 'MMC', zone: 'Riyadh — Central', window: '08:00 – 23:00' },

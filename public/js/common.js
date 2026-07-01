@@ -193,3 +193,24 @@ const CATEGORY_BADGE = {
   Transport: 'badge-green',
   Catering: 'badge-amber',
 };
+
+/* ---- dynamic categories (managed via the admin panel) --------------------- */
+
+let CATEGORIES = [];
+
+async function loadCategories() {
+  try { CATEGORIES = await API.get('/categories'); } catch (e) { /* keep last */ }
+  return CATEGORIES;
+}
+
+/** Colour for a category name; falls back to a neutral grey. */
+function categoryColor(name) {
+  const c = CATEGORIES.find((x) => x.name === name);
+  return (c && c.color) || '#5c6a7e';
+}
+
+/** Render a category chip tinted with the category's own colour. */
+function catBadge(name) {
+  const color = categoryColor(name);
+  return `<span class="badge cat-badge" style="color:${esc(color)};background:${esc(color)}1f;border-color:${esc(color)}3d">${esc(name)}</span>`;
+}

@@ -65,12 +65,14 @@ async function init() {
   const News = model('News', new Schema({ id: { type: String, unique: true }, title: String, body: String, category: String, pinned: Boolean, timestamp: String }, opts));
   const Press = model('Press', new Schema({ id: { type: String, unique: true }, date: String, time: String, team: String, room: String, status: String, note: String }, opts));
   const Transport = model('Transport', new Schema({ id: { type: String, unique: true }, route: String, type: String, from: String, to: String, frequency: String, firstDeparture: String, lastDeparture: String, duration: String, notes: String }, opts));
+  const Category = model('Category', new Schema({ id: { type: String, unique: true }, name: String, color: String }, opts));
 
-  models = { Meta, Location, User, Voucher, News, Press, Transport };
+  models = { Meta, Location, User, Voucher, News, Press, Transport, Category };
 
   // Ensure indexes (incl. the unique voucher constraint) are built.
   await Promise.all(Object.values(models).map((m) => m.init()));
   await seedIfEmpty();
+  await seedCategoriesIfEmpty();
 }
 
 /** Reuse an already-compiled model if init() runs more than once. */
@@ -91,6 +93,13 @@ async function seedIfEmpty() {
   if (seed.news.length) await models.News.insertMany(seed.news);
   if (seed.pressConferences.length) await models.Press.insertMany(seed.pressConferences);
   if (seed.transport.length) await models.Transport.insertMany(seed.transport);
+}
+
+// Seed default categories independently (databases created before this feature
+// still get the defaults on the next boot).
+async function seedCategoriesIfEmpty() {
+  if (await models.Category.countDocuments()) return;
+  await models.Category.insertMany(getSeedData().categories);
 }
 
 // ---- meta -------------------------------------------------------------------
@@ -255,6 +264,27 @@ async function deleteTransport(id) {
   return r.deletedCount > 0;
 }
 
+// ---- categories -------------------------------------------------------------
+
+async function listCategories() {
+  return (await models.Category.find().sort({ name: 1 }).lean()).map(strip);
+}
+
+async function createCategory(item) {
+  await models.Category.create(item);
+  return item;
+}
+
+async function updateCategory(id, fields) {
+  const allowed = pick(fields, ['name', 'color']);
+  return strip(await models.Category.findOneAndUpdate({ id }, { $set: allowed }, { new: true }).lean());
+}
+
+async function deleteCategory(id) {
+  const r = await models.Category.deleteOne({ id });
+  return r.deletedCount > 0;
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 function pick(obj, keys) {
@@ -295,4 +325,8 @@ module.exports = {
   createTransport,
   updateTransport,
   deleteTransport,
+  listCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 };

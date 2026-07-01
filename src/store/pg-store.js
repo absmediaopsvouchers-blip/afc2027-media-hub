@@ -48,6 +48,7 @@ async function init() {
 
   await migrate();
   await seedIfEmpty();
+  await seedCategoriesIfEmpty();
 }
 
 function q(text, params) {
@@ -119,6 +120,11 @@ async function migrate() {
       duration        TEXT,
       notes           TEXT
     );
+    CREATE TABLE IF NOT EXISTS categories (
+      id    TEXT PRIMARY KEY,
+      name  TEXT NOT NULL,
+      color TEXT
+    );
   `);
 }
 
@@ -163,6 +169,16 @@ async function seedIfEmpty() {
       'INSERT INTO transport (id, route, type, "from", "to", frequency, first_departure, last_departure, duration, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING',
       [t.id, t.route, t.type, t.from, t.to, t.frequency, t.firstDeparture, t.lastDeparture, t.duration, t.notes]
     );
+  }
+}
+
+// Seed default categories independently, so databases provisioned before the
+// categories feature existed still get the defaults on the next boot.
+async function seedCategoriesIfEmpty() {
+  const { rows } = await q('SELECT COUNT(*)::int AS n FROM categories');
+  if (rows[0].n > 0) return;
+  for (const c of getSeedData().categories) {
+    await q('INSERT INTO categories (id, name, color) VALUES ($1,$2,$3) ON CONFLICT (id) DO NOTHING', [c.id, c.name, c.color]);
   }
 }
 
@@ -450,6 +466,41 @@ async function deleteTransport(id) {
   return rowCount > 0;
 }
 
+// ---- categories -------------------------------------------------------------
+
+async function listCategories() {
+  const { rows } = await q('SELECT * FROM categories ORDER BY name');
+  return rows;
+}
+
+async function createCategory(item) {
+  await q('INSERT INTO categories (id, name, color) VALUES ($1,$2,$3)', [item.id, item.name, item.color]);
+  return item;
+}
+
+async function updateCategory(id, fields) {
+  const sets = [];
+  const vals = [];
+  for (const f of ['name', 'color']) {
+    if (fields[f] !== undefined) {
+      vals.push(fields[f]);
+      sets.push(`${f} = $${vals.length}`);
+    }
+  }
+  if (!sets.length) {
+    const { rows } = await q('SELECT * FROM categories WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+  vals.push(id);
+  const { rows } = await q(`UPDATE categories SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING *`, vals);
+  return rows[0] || null;
+}
+
+async function deleteCategory(id) {
+  const { rowCount } = await q('DELETE FROM categories WHERE id = $1', [id]);
+  return rowCount > 0;
+}
+
 module.exports = {
   backend,
   init,
@@ -482,4 +533,8 @@ module.exports = {
   createTransport,
   updateTransport,
   deleteTransport,
+  listCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 };

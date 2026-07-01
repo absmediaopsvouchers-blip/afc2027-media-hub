@@ -72,6 +72,8 @@ async function loadConfig() {
         state.form.meal = first.allowedMeals[0];
       }
     }
+    // Load managed categories (for the News feed badges).
+    await loadCategories();
     // Restore today's saved vouchers, then refresh from the server.
     loadCachedVouchers();
     if (isEmailLike(state.form.email)) fetchMyVouchers(state.form.email);
@@ -576,10 +578,9 @@ async function renderNews() {
 
   let html = head + '<div class="card">';
   for (const n of list) {
-    const cat = CATEGORY_BADGE[n.category] || 'badge-gray';
     html += `<div class="news-item">
       <div class="news-top">
-        <span class="badge ${cat}">${esc(n.category)}</span>
+        ${catBadge(n.category)}
         ${n.pinned ? `<span class="badge badge-amber">Pinned</span>` : ''}
         <span class="news-time" style="margin-left:auto">${esc(relTime(n.timestamp))}</span>
       </div>

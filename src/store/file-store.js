@@ -263,6 +263,35 @@ async function deleteTransport(id) {
   return true;
 }
 
+// ---- categories -------------------------------------------------------------
+
+async function listCategories() {
+  return (data.categories || []).slice();
+}
+
+async function createCategory(item) {
+  if (!data.categories) data.categories = [];
+  data.categories.push(item);
+  persist();
+  return item;
+}
+
+async function updateCategory(id, fields) {
+  const item = (data.categories || []).find((c) => c.id === id);
+  if (!item) return null;
+  Object.assign(item, fields);
+  persist();
+  return item;
+}
+
+async function deleteCategory(id) {
+  const before = (data.categories || []).length;
+  data.categories = (data.categories || []).filter((c) => c.id !== id);
+  if (data.categories.length === before) return false;
+  persist();
+  return true;
+}
+
 module.exports = {
   backend,
   init,
@@ -295,4 +324,8 @@ module.exports = {
   createTransport,
   updateTransport,
   deleteTransport,
+  listCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 };

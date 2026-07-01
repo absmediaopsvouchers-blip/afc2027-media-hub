@@ -329,6 +329,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 .badge-red { background: var(--bad-soft); color: var(--bad); }
 .badge-gray { background: #eceff4; color: #5c6a7e; }
 .badge-purple { background: #f1e3fb; color: #7a2bb8; }
+.cat-badge { border: 1px solid transparent; }
 .badge-live { background: var(--live-soft); color: var(--live); }
 .badge-live .dot { animation: pulse 1.3s infinite; }
 @keyframes pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
