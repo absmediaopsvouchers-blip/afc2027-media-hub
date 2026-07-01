@@ -62,7 +62,7 @@ async function init() {
   voucherSchema.index({ email: 1, locationId: 1, date: 1, mealType: 1 }, { unique: true });
   const Voucher = model('Voucher', voucherSchema);
 
-  const News = model('News', new Schema({ id: { type: String, unique: true }, title: String, body: String, category: String, pinned: Boolean, timestamp: String }, opts));
+  const News = model('News', new Schema({ id: { type: String, unique: true }, title: String, body: String, category: String, pinned: Boolean, timestamp: String, attachments: { type: Array, default: [] } }, opts));
   const Press = model('Press', new Schema({ id: { type: String, unique: true }, date: String, time: String, team: String, room: String, status: String, note: String }, opts));
   const Transport = model('Transport', new Schema({ id: { type: String, unique: true }, route: String, type: String, from: String, to: String, frequency: String, firstDeparture: String, lastDeparture: String, duration: String, notes: String }, opts));
   const Category = model('Category', new Schema({ id: { type: String, unique: true }, name: String, color: String }, opts));
@@ -213,7 +213,7 @@ async function createNews(item) {
 }
 
 async function updateNews(id, fields) {
-  const allowed = pick(fields, ['title', 'body', 'category', 'pinned']);
+  const allowed = pick(fields, ['title', 'body', 'category', 'pinned', 'attachments']);
   return strip(await models.News.findOneAndUpdate({ id }, { $set: allowed }, { new: true }).lean());
 }
 

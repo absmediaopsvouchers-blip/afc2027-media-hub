@@ -92,13 +92,15 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_vouchers_date ON vouchers (date);
     CREATE INDEX IF NOT EXISTS idx_vouchers_email ON vouchers (email);
     CREATE TABLE IF NOT EXISTS news (
-      id        TEXT PRIMARY KEY,
-      title     TEXT NOT NULL,
-      body      TEXT,
-      category  TEXT,
-      pinned    BOOLEAN NOT NULL DEFAULT false,
-      timestamp TIMESTAMPTZ NOT NULL DEFAULT now()
+      id          TEXT PRIMARY KEY,
+      title       TEXT NOT NULL,
+      body        TEXT,
+      category    TEXT,
+      pinned      BOOLEAN NOT NULL DEFAULT false,
+      timestamp   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      attachments TEXT NOT NULL DEFAULT '[]'
     );
+    ALTER TABLE news ADD COLUMN IF NOT EXISTS attachments TEXT NOT NULL DEFAULT '[]';
     CREATE TABLE IF NOT EXISTS press_conferences (
       id     TEXT PRIMARY KEY,
       date   TEXT,
@@ -208,7 +210,9 @@ function toUser(r) {
 }
 
 function toNews(r) {
-  return { id: r.id, title: r.title, body: r.body, category: r.category, pinned: r.pinned, timestamp: iso(r.timestamp) };
+  let attachments = [];
+  try { attachments = r.attachments ? JSON.parse(r.attachments) : []; } catch (e) { attachments = []; }
+  return { id: r.id, title: r.title, body: r.body, category: r.category, pinned: r.pinned, timestamp: iso(r.timestamp), attachments };
 }
 
 function toTransport(r) {
@@ -355,14 +359,16 @@ async function listNews() {
 }
 
 async function createNews(item) {
-  await q('INSERT INTO news (id, title, body, category, pinned, timestamp) VALUES ($1,$2,$3,$4,$5,$6)', [
-    item.id, item.title, item.body, item.category, item.pinned, item.timestamp,
+  await q('INSERT INTO news (id, title, body, category, pinned, timestamp, attachments) VALUES ($1,$2,$3,$4,$5,$6,$7)', [
+    item.id, item.title, item.body, item.category, item.pinned, item.timestamp, JSON.stringify(item.attachments || []),
   ]);
   return item;
 }
 
 async function updateNews(id, fields) {
-  const allowed = ['title', 'body', 'category', 'pinned'];
+  // attachments is stored as JSON text — serialize it if present.
+  if (fields.attachments !== undefined) fields = { ...fields, attachments: JSON.stringify(fields.attachments) };
+  const allowed = ['title', 'body', 'category', 'pinned', 'attachments'];
   const sets = [];
   const vals = [];
   for (const f of allowed) {

@@ -50,6 +50,30 @@ function isEmail(s) {
   return typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
+// ---- news attachments (images / PDFs stored as base64 data URLs) ------------
+const ATT_ALLOWED = /^(image\/(png|jpe?g|gif|webp)|application\/pdf)$/i;
+const ATT_MAX_BYTES = 3 * 1024 * 1024; // 3 MB per file (decoded)
+const ATT_MAX_COUNT = 4;
+
+/** Validate/normalise a list of attachments. @returns {ok, attachments}|{ok:false,error} */
+function validateAttachments(raw) {
+  if (raw === undefined || raw === null) return { ok: true, attachments: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: 'Attachments must be a list.' };
+  if (raw.length > ATT_MAX_COUNT) return { ok: false, error: `Please attach at most ${ATT_MAX_COUNT} files.` };
+  const out = [];
+  for (const a of raw) {
+    if (!a || typeof a.dataUrl !== 'string') return { ok: false, error: 'Invalid attachment.' };
+    const m = a.dataUrl.match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) return { ok: false, error: 'Each attachment must be a base64 data URL.' };
+    if (!ATT_ALLOWED.test(m[1])) return { ok: false, error: 'Only images (PNG/JPG/GIF/WebP) and PDFs are allowed.' };
+    if (Math.floor((m[2].length * 3) / 4) > ATT_MAX_BYTES) {
+      return { ok: false, error: `“${a.name || 'A file'}” is too large (max 3 MB each).` };
+    }
+    out.push({ name: String(a.name || 'file').slice(0, 140), type: m[1], dataUrl: a.dataUrl });
+  }
+  return { ok: true, attachments: out };
+}
+
 /** A voucher's effective status, applying same-day expiry without a DB write. */
 function effectiveStatus(v, today) {
   if (v.status === STATUS.PENDING && v.date < today) return STATUS.EXPIRED;
@@ -473,6 +497,8 @@ router.delete('/locations/:id', requireAdmin, wrap(async (req, res) => {
 // ---- News CMS ---------------------------------------------------------------
 
 router.post('/news', requireAdmin, wrap(async (req, res) => {
+  const att = validateAttachments(req.body.attachments);
+  if (!att.ok) return res.status(400).json({ error: att.error });
   const item = {
     id: uid('NW'),
     title: String(req.body.title || '').trim() || 'Untitled update',
@@ -480,6 +506,7 @@ router.post('/news', requireAdmin, wrap(async (req, res) => {
     category: String(req.body.category || 'Announcement').trim(),
     pinned: !!req.body.pinned,
     timestamp: new Date().toISOString(),
+    attachments: att.attachments,
   };
   await store.createNews(item);
   res.status(201).json(item);
@@ -491,6 +518,11 @@ router.put('/news/:id', requireAdmin, wrap(async (req, res) => {
     if (req.body[f] !== undefined) fields[f] = String(req.body[f]).trim();
   }
   if (req.body.pinned !== undefined) fields.pinned = !!req.body.pinned;
+  if (req.body.attachments !== undefined) {
+    const att = validateAttachments(req.body.attachments);
+    if (!att.ok) return res.status(400).json({ error: att.error });
+    fields.attachments = att.attachments;
+  }
   const updated = await store.updateNews(req.params.id, fields);
   if (!updated) return res.status(404).json({ error: 'News item not found.' });
   res.json(updated);

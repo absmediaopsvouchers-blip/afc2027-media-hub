@@ -27,6 +27,7 @@ const state = {
   ticketPoll: null, // interval id for live voucher-status polling
   myVouchers: [], // this user's vouchers for today (server-backed + cached)
   myVouchersDate: null,
+  news: [], // last-loaded news list (for attachment lookups)
   // Persisted across tab switches so a half-filled form survives navigation.
   form: { email: '', acc: '', known: null, locationId: '', meal: '' },
 };
@@ -576,6 +577,7 @@ async function renderNews() {
 
   if (!list.length) { view().innerHTML = head + emptyHtml('No updates posted yet.'); return; }
 
+  state.news = list; // kept so attachment clicks can look up the data URL
   let html = head + '<div class="card">';
   for (const n of list) {
     html += `<div class="news-item">
@@ -586,10 +588,70 @@ async function renderNews() {
       </div>
       <div class="news-title">${esc(n.title)}</div>
       <div class="news-body">${esc(n.body)}</div>
+      ${attachmentsHtml(n)}
     </div>`;
   }
   html += '</div>';
   view().innerHTML = html;
+
+  view().querySelectorAll('[data-att]').forEach((b) => b.addEventListener('click', () => {
+    const [nid, idxStr] = b.dataset.att.split(':');
+    const n = (state.news || []).find((x) => x.id === nid);
+    const a = n && (n.attachments || [])[Number(idxStr)];
+    if (!a) return;
+    if (a.type && a.type.indexOf('image/') === 0) openLightbox(a.dataUrl, a.name);
+    else openBlob(a.dataUrl);
+  }));
+}
+
+/* ---- news attachments (images / PDFs) ------------------------------------- */
+
+function attachmentsHtml(n) {
+  const atts = n.attachments || [];
+  if (!atts.length) return '';
+  let h = '<div class="news-attach">';
+  atts.forEach((a, i) => {
+    const isImg = a.type && a.type.indexOf('image/') === 0;
+    if (isImg) {
+      h += `<button type="button" class="att-thumb" data-att="${esc(n.id)}:${i}" title="${esc(a.name)}"><img src="${a.dataUrl}" alt="${esc(a.name)}" loading="lazy"></button>`;
+    } else {
+      h += `<button type="button" class="att-file" data-att="${esc(n.id)}:${i}">${ICONS.file}<span>${esc(a.name)}</span></button>`;
+    }
+  });
+  return h + '</div>';
+}
+
+function dataUrlToBlob(dataUrl) {
+  const comma = dataUrl.indexOf(',');
+  const mime = (dataUrl.slice(0, comma).match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+  const bin = atob(dataUrl.slice(comma + 1));
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+/** Open a PDF/file via a blob URL (browsers block navigating to data: URLs). */
+function openBlob(dataUrl) {
+  try {
+    const url = URL.createObjectURL(dataUrlToBlob(dataUrl));
+    const w = window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    if (!w) toast('Pop-up blocked — allow pop-ups to view the file.', 'error');
+  } catch (e) { toast('Could not open the file.', 'error'); }
+}
+
+function openLightbox(dataUrl, name) {
+  const existing = document.getElementById('lightbox');
+  if (existing) existing.remove();
+  const ov = document.createElement('div');
+  ov.id = 'lightbox';
+  ov.className = 'lightbox';
+  ov.innerHTML = `<button class="lb-close" aria-label="Close">${ICONS.close}</button>
+    <img src="${dataUrl}" alt="${esc(name || '')}">
+    ${name ? `<div class="lb-name">${esc(name)}</div>` : ''}`;
+  ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('.lb-close')) ov.remove(); });
+  document.addEventListener('keydown', function esc2(e) { if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', esc2); } });
+  document.body.appendChild(ov);
 }
 
 /* =============================================================================

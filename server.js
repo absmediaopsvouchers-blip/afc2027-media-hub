@@ -32,7 +32,8 @@ async function main() {
 
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json());
+  // Larger limit so News posts can carry base64 image/PDF attachments.
+  app.use(express.json({ limit: '16mb' }));
 
   // Health check (used by cloud platforms to verify the instance is live).
   app.get('/healthz', (req, res) => res.json({ ok: true, backend: store.backend, today: todayInTz() }));

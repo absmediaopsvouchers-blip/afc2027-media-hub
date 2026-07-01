@@ -628,7 +628,7 @@ function renderNewsList() {
           <span>${esc(n.title)}</span>
         </div>
         <div class="mgr-body">${esc(n.body)}</div>
-        <div class="mgr-sub">${esc(relTime(n.timestamp))}</div>
+        <div class="mgr-sub">${esc(relTime(n.timestamp))}${n.attachments && n.attachments.length ? ` · <span class="att-count">${ICONS.paperclip} ${n.attachments.length}</span>` : ''}</div>
       </div>
       <div class="mgr-actions">
         <button class="btn btn-ghost btn-icon" title="Edit" data-edit="${esc(n.id)}">${ICONS.edit}</button>
@@ -642,9 +642,43 @@ function renderNewsList() {
     b.addEventListener('click', () => deleteNews(b.dataset.del)));
 }
 
+// Working set of attachments for the currently-open news editor.
+let neAttachments = [];
+
+function readFileAsDataURL(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+}
+
+function renderNeAttachments() {
+  const el = document.getElementById('ne-att-list');
+  if (!el) return;
+  el.innerHTML = neAttachments.map((a, i) => {
+    const isImg = a.type && a.type.indexOf('image/') === 0;
+    const thumb = isImg ? `<img src="${a.dataUrl}" alt="">` : ICONS.file;
+    return `<div class="att-chip"><span class="att-chip-thumb">${thumb}</span><span class="att-chip-name">${esc(a.name)}</span><button type="button" class="att-chip-x" data-rm="${i}" title="Remove">${ICONS.close}</button></div>`;
+  }).join('');
+  el.querySelectorAll('[data-rm]').forEach((b) =>
+    b.addEventListener('click', () => { neAttachments.splice(Number(b.dataset.rm), 1); renderNeAttachments(); }));
+}
+
+async function onNeFiles(e) {
+  const files = Array.from(e.target.files || []);
+  for (const f of files) {
+    if (neAttachments.length >= 4) { toast('Up to 4 attachments per post.', 'error'); break; }
+    if (f.size > 3 * 1024 * 1024) { toast(`“${f.name}” is too large (max 3 MB).`, 'error'); continue; }
+    try {
+      const dataUrl = await readFileAsDataURL(f);
+      neAttachments.push({ name: f.name, type: f.type || 'application/octet-stream', dataUrl });
+    } catch (err) { toast(`Could not read “${f.name}”.`, 'error'); }
+  }
+  e.target.value = '';
+  renderNeAttachments();
+}
+
 function openNewsEditor(item) {
   const ed = document.getElementById('news-editor');
   const it = item || { title: '', body: '', category: (CATEGORIES[0] && CATEGORIES[0].name) || 'Announcement', pinned: false };
+  neAttachments = (item && Array.isArray(item.attachments)) ? item.attachments.slice() : [];
   // Category options come from the managed list; keep the item's own value even
   // if its category was later deleted.
   const catNames = CATEGORIES.length ? CATEGORIES.map((c) => c.name) : NEWS_CATS.slice();
@@ -661,12 +695,22 @@ function openNewsEditor(item) {
       </div>
       <div class="field"><label>Body</label>
         <textarea class="textarea" id="ne-body" placeholder="Update details…">${esc(it.body)}</textarea></div>
+      <div class="field"><label>Attachments <span class="hint">— images or PDF · up to 4 · max 3 MB each</span></label>
+        <div class="att-editor">
+          <div class="att-list" id="ne-att-list"></div>
+          <label class="btn btn-ghost btn-sm att-add">${ICONS.paperclip}<span>Add files</span>
+            <input type="file" id="ne-att-input" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf" multiple hidden>
+          </label>
+        </div>
+      </div>
       <div class="editor-actions">
         <button class="btn btn-ghost btn-sm" id="ne-cancel">Cancel</button>
         <button class="btn btn-primary btn-sm" id="ne-save">${ICONS.check}<span>${item ? 'Save changes' : 'Publish update'}</span></button>
       </div>
     </div>`;
   ed.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  renderNeAttachments();
+  document.getElementById('ne-att-input').addEventListener('change', onNeFiles);
   document.getElementById('ne-cancel').addEventListener('click', () => { ed.innerHTML = ''; });
   document.getElementById('ne-save').addEventListener('click', () => saveNews(item ? item.id : null));
   document.getElementById('ne-title').focus();
@@ -678,6 +722,7 @@ async function saveNews(id) {
     body: val('ne-body').trim(),
     category: val('ne-cat'),
     pinned: document.getElementById('ne-pin').checked,
+    attachments: neAttachments,
   };
   if (!payload.title) { toast('Please enter a title.', 'error'); return; }
   try {
