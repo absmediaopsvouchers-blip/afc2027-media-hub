@@ -32,6 +32,19 @@ async function main() {
 
   const app = express();
   app.disable('x-powered-by');
+
+  // CORS: the API is read directly from the browser by other AFC 2027 tools
+  // on different origins (e.g. the Central Dashboard). No cookies/credentials
+  // are used — admin auth is a bearer-style header — so a permissive origin
+  // is safe here and avoids maintaining an allowlist across deploys.
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+  });
+
   // Larger limit so News posts can carry base64 image/PDF attachments.
   app.use(express.json({ limit: '16mb' }));
 
