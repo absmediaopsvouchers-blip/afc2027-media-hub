@@ -74,6 +74,36 @@ function validateAttachments(raw) {
   return { ok: true, attachments: out };
 }
 
+// ---- theme / design settings ------------------------------------------------
+const THEME_FONTS = ['IBM Plex Sans', 'Inter', 'Poppins', 'Montserrat', 'Roboto', 'System'];
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const IMG_DATA_RE = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,([A-Za-z0-9+/=]+)$/;
+
+/** Validate/normalise submitted theme fields (only those present are touched). */
+function sanitizeTheme(body) {
+  const t = {};
+  for (const k of ['brandColor', 'accentColor', 'bgColor']) {
+    if (body[k] === undefined) continue;
+    const v = String(body[k] || '').trim();
+    if (v === '' || HEX_RE.test(v)) t[k] = v;
+    else return { ok: false, error: `Invalid colour value for ${k}.` };
+  }
+  for (const k of ['headerTitle', 'headerSubtitle']) {
+    if (body[k] !== undefined) t[k] = String(body[k]).slice(0, 80);
+  }
+  if (body.font !== undefined) t.font = THEME_FONTS.includes(String(body.font)) ? String(body.font) : 'IBM Plex Sans';
+  for (const [k, max, label] of [['logo', 1.2 * 1024 * 1024, 'Logo'], ['background', 2.6 * 1024 * 1024, 'Background']]) {
+    if (body[k] === undefined) continue;
+    const v = String(body[k] || '');
+    if (v === '') { t[k] = ''; continue; }
+    const m = v.match(IMG_DATA_RE);
+    if (!m) return { ok: false, error: `${label} must be an image (PNG/JPG/GIF/WebP/SVG).` };
+    if (Math.floor((m[2].length * 3) / 4) > max) return { ok: false, error: `${label} image is too large.` };
+    t[k] = v;
+  }
+  return { ok: true, theme: t };
+}
+
 /** A voucher's effective status, applying same-day expiry without a DB write. */
 function effectiveStatus(v, today) {
   if (v.status === STATUS.PENDING && v.date < today) return STATUS.EXPIRED;
@@ -281,6 +311,10 @@ router.get('/transport', wrap(async (req, res) => {
 
 router.get('/categories', wrap(async (req, res) => {
   res.json(await store.listCategories());
+}));
+
+router.get('/theme', wrap(async (req, res) => {
+  res.json(await store.getSettings());
 }));
 
 // A shareable QR code that opens the Media Client app. The encoded URL is the
@@ -561,6 +595,16 @@ router.delete('/categories/:id', requireAdmin, wrap(async (req, res) => {
   const ok = await store.deleteCategory(req.params.id);
   if (!ok) return res.status(404).json({ error: 'Category not found.' });
   res.json({ ok: true });
+}));
+
+// ---- Theme / Design ---------------------------------------------------------
+
+router.put('/theme', requireAdmin, wrap(async (req, res) => {
+  const s = sanitizeTheme(req.body || {});
+  if (!s.ok) return res.status(400).json({ error: s.error });
+  const merged = { ...(await store.getSettings()), ...s.theme };
+  await store.saveSettings(merged);
+  res.json(merged);
 }));
 
 // ---- Press conference CMS ---------------------------------------------------

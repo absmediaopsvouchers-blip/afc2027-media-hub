@@ -37,6 +37,10 @@ function getSeedData() {
       subtitle: 'Media Operations Hub',
     },
 
+    // Admin-editable theme (colours, fonts, header, logo, background). Empty =
+    // use the built-in defaults; the client applies any overrides via CSS vars.
+    settings: {},
+
     // Registered media members: email -> accreditation. Filled in as people
     // make their first request. Seeded with one demo account.
     users: [

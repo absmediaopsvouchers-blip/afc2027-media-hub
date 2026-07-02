@@ -151,6 +151,17 @@
 .att-count { display: inline-flex; align-items: center; gap: 3px; }
 .att-count svg { width: 13px; height: 13px; }
 
+/* ---- design & branding preview -------------------------------------------- */
+
+.design-preview-card { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-sm); margin-bottom: 16px; }
+.dp-bar { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.dp-mark { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex: none; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); }
+.dp-mark svg { width: 22px; height: 22px; color: #fff; }
+.dp-title { color: #fff; font-weight: 700; font-size: 1.02rem; }
+.dp-sub { color: rgba(255, 255, 255, .72); font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+.dp-body { display: flex; align-items: center; gap: 14px; padding: 16px; background: var(--surface); }
+.dp-hint { color: var(--faint); font-size: .82rem; font-weight: 600; }
+
 /* ---- live feed status tags ------------------------------------------------ */
 
 .feed-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }

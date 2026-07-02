@@ -18,6 +18,7 @@ const ADMIN_TABS = [
   { id: 'categories', label: 'Categories' },
   { id: 'press', label: 'Press' },
   { id: 'transport', label: 'Transport' },
+  { id: 'design', label: 'Design' },
 ];
 const NEWS_CATS = ['Announcement', 'Alert', 'Operations', 'Transport', 'Catering'];
 const PC_STATUS = ['Scheduled', 'Live', 'Delayed', 'Concluded'];
@@ -41,6 +42,7 @@ const adminState = {
   venues: [],
   transport: [],
   categories: [],
+  theme: null,
   pollTimer: null,
   scanner: null, // { stream, video, timer }
 };
@@ -63,6 +65,9 @@ function init() {
   logout.addEventListener('click', () => { Admin.clear(); teardownTransients(); showLogin(); });
 
   startClock();
+
+  // Apply saved branding to the admin shell too (colours, font, logo, bg).
+  loadTheme().then(() => applyLogo(THEME.logo));
 
   if (Admin.key()) showDashboard();
   else showLogin();
@@ -144,6 +149,7 @@ function renderPanel() {
   if (adminState.tab === 'categories') return renderCategoriesMgr();
   if (adminState.tab === 'press') return renderPressMgr();
   if (adminState.tab === 'transport') return renderTransportMgr();
+  if (adminState.tab === 'design') return renderDesignMgr();
 }
 
 function handleAdminErr(e) {
@@ -1059,6 +1065,172 @@ async function deleteCategory(id) {
   if (!confirm('Delete this category? Existing news keeps its label but loses the colour.')) return;
   try { await API.del('/categories/' + id, true); toast('Category deleted.', 'success'); await loadCategoriesAdmin(); }
   catch (e) { handleAdminErr(e); }
+}
+
+/* =============================================================================
+   DESIGN & BRANDING
+   ========================================================================== */
+
+const DESIGN_DEFAULTS = {
+  brandColor: '#12274a', accentColor: '#2f6bff', bgColor: '#eef1f5',
+  font: 'IBM Plex Sans', headerTitle: '', headerSubtitle: '', logo: '', background: '',
+};
+let designLogo = '';
+let designBg = '';
+
+async function renderDesignMgr() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `<div class="admin-head"><h2>Design &amp; branding</h2></div><div id="design-body">${loadingHtml()}</div>`;
+  try { adminState.theme = await API.get('/theme'); }
+  catch (e) { const el = document.getElementById('design-body'); if (el) el.innerHTML = errorHtml(e.message); return; }
+  renderDesignForm();
+}
+
+function designColorField(id, label, value) {
+  return `<div class="field"><label>${label}</label>
+    <div class="color-row">
+      <input type="color" id="${id}" value="${esc(value)}">
+      <input class="input mono" id="${id}-hex" value="${esc(value)}">
+    </div></div>`;
+}
+
+function renderDesignForm() {
+  const t = { ...DESIGN_DEFAULTS, ...(adminState.theme || {}) };
+  designLogo = t.logo || '';
+  designBg = t.background || '';
+  document.getElementById('design-body').innerHTML = `
+    <p class="mgr-note">${ICONS.info}<span>Tailor the look for your event — changes preview instantly. Click <strong>Save &amp; apply</strong> to publish for everyone (client &amp; admin).</span></p>
+    <div id="design-preview"></div>
+    <div class="card card-pad">
+      <div class="row2">
+        <div class="field"><label>Header title</label><input class="input" id="d-title" value="${esc(t.headerTitle)}" placeholder="Media Hub"></div>
+        <div class="field"><label>Header subtitle</label><input class="input" id="d-sub" value="${esc(t.headerSubtitle)}" placeholder="AFC Asian Cup 2027"></div>
+      </div>
+      <div class="row2">
+        ${designColorField('d-brand', 'Brand colour (header)', t.brandColor)}
+        ${designColorField('d-accent', 'Accent colour (buttons)', t.accentColor)}
+      </div>
+      <div class="row2">
+        ${designColorField('d-bg', 'Page background colour', t.bgColor)}
+        <div class="field"><label>Font</label><select class="select" id="d-font">${THEME_FONTS.map((f) => `<option ${f.name === t.font ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Logo <span class="hint">— replaces the icon · max 1 MB</span></label>
+          <div class="att-editor"><div class="att-list" id="d-logo-list"></div>
+            <label class="btn btn-ghost btn-sm att-add">${ICONS.plus}<span>Upload logo</span><input type="file" id="d-logo-input" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden></label></div>
+        </div>
+        <div class="field"><label>Background image <span class="hint">— optional · max 2.5 MB</span></label>
+          <div class="att-editor"><div class="att-list" id="d-bg-list"></div>
+            <label class="btn btn-ghost btn-sm att-add">${ICONS.plus}<span>Upload background</span><input type="file" id="d-bg-input" accept="image/png,image/jpeg,image/webp" hidden></label></div>
+        </div>
+      </div>
+      <div class="editor-actions">
+        <button class="btn btn-ghost btn-sm" id="d-reset">Reset to defaults</button>
+        <button class="btn btn-primary btn-sm" id="d-save">${ICONS.check}<span>Save &amp; apply</span></button>
+      </div>
+    </div>`;
+
+  ['d-title', 'd-sub', 'd-font'].forEach((id) => document.getElementById(id).addEventListener('input', onDesignChange));
+  [['d-brand', 'd-brand-hex'], ['d-accent', 'd-accent-hex'], ['d-bg', 'd-bg-hex']].forEach(([p, h]) => {
+    const pk = document.getElementById(p), hx = document.getElementById(h);
+    pk.addEventListener('input', () => { hx.value = pk.value; onDesignChange(); });
+    hx.addEventListener('input', () => { if (/^#[0-9a-fA-F]{6}$/.test(hx.value)) { pk.value = hx.value; onDesignChange(); } });
+  });
+  document.getElementById('d-logo-input').addEventListener('change', (e) => onDesignFile(e, 'logo'));
+  document.getElementById('d-bg-input').addEventListener('change', (e) => onDesignFile(e, 'bg'));
+  document.getElementById('d-save').addEventListener('click', saveDesign);
+  document.getElementById('d-reset').addEventListener('click', resetDesign);
+  renderDesignAssets();
+  onDesignChange();
+}
+
+function readDesignForm() {
+  return {
+    headerTitle: val('d-title').trim(),
+    headerSubtitle: val('d-sub').trim(),
+    brandColor: val('d-brand-hex').trim() || val('d-brand'),
+    accentColor: val('d-accent-hex').trim() || val('d-accent'),
+    bgColor: val('d-bg-hex').trim() || val('d-bg'),
+    font: val('d-font'),
+    logo: designLogo,
+    background: designBg,
+  };
+}
+
+function onDesignChange() {
+  const t = readDesignForm();
+  applyTheme(t);      // live-recolour the admin page
+  if (t.logo) applyLogo(t.logo);
+  else { const m = document.getElementById('brand-mark'); if (m) { m.innerHTML = ICONS.dash; m.style.background = ''; m.style.boxShadow = ''; } }
+  renderDesignPreview(t);
+}
+
+function renderDesignPreview(t) {
+  const el = document.getElementById('design-preview');
+  if (!el) return;
+  const brand = /^#[0-9a-fA-F]{6}$/.test(t.brandColor) ? t.brandColor : '#12274a';
+  const accent = /^#[0-9a-fA-F]{6}$/.test(t.accentColor) ? t.accentColor : '#2f6bff';
+  const mark = t.logo
+    ? `<img src="${t.logo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`
+    : ICONS.ticket;
+  el.innerHTML = `
+    <div class="design-preview-card">
+      <div class="dp-bar" style="background:linear-gradient(120deg, ${brand}, ${mixHex(brand, '#ffffff', 0.16)})">
+        <div class="dp-mark" style="background:${t.logo ? 'none' : 'linear-gradient(135deg,' + accent + ',#5b8bff)'}">${mark}</div>
+        <div class="dp-text"><div class="dp-title">${esc(t.headerTitle || 'Media Hub')}</div><div class="dp-sub">${esc(t.headerSubtitle || 'AFC Asian Cup 2027')}</div></div>
+      </div>
+      <div class="dp-body">
+        <button class="btn btn-primary btn-sm" style="pointer-events:none;background:${accent}">Generate Voucher</button>
+        <span class="dp-hint">Live preview</span>
+      </div>
+    </div>`;
+}
+
+async function onDesignFile(e, kind) {
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if (!f) return;
+  const max = kind === 'logo' ? 1024 * 1024 : 2.5 * 1024 * 1024;
+  if (f.size > max) { toast(`Image too large (max ${kind === 'logo' ? '1' : '2.5'} MB).`, 'error'); return; }
+  try {
+    const dataUrl = await readFileAsDataURL(f);
+    if (kind === 'logo') designLogo = dataUrl; else designBg = dataUrl;
+    renderDesignAssets();
+    onDesignChange();
+  } catch (err) { toast('Could not read the image.', 'error'); }
+}
+
+function designAssetChip(dataUrl, kind) {
+  return `<div class="att-chip"><span class="att-chip-thumb"><img src="${dataUrl}" alt=""></span><span class="att-chip-name">${kind === 'logo' ? 'Logo' : 'Background'}</span><button type="button" class="att-chip-x" data-rmasset="${kind}" title="Remove">${ICONS.close}</button></div>`;
+}
+
+function renderDesignAssets() {
+  const lg = document.getElementById('d-logo-list');
+  const bg = document.getElementById('d-bg-list');
+  if (lg) lg.innerHTML = designLogo ? designAssetChip(designLogo, 'logo') : '';
+  if (bg) bg.innerHTML = designBg ? designAssetChip(designBg, 'bg') : '';
+  document.querySelectorAll('[data-rmasset]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.rmasset === 'logo') designLogo = ''; else designBg = '';
+    renderDesignAssets();
+    onDesignChange();
+  }));
+}
+
+async function saveDesign() {
+  try {
+    const saved = await API.put('/theme', readDesignForm(), true);
+    THEME = saved; adminState.theme = saved;
+    toast('Design saved & applied.', 'success');
+  } catch (e) { handleAdminErr(e); }
+}
+
+async function resetDesign() {
+  if (!confirm('Reset all design settings to the defaults?')) return;
+  try {
+    await API.put('/theme', { brandColor: '', accentColor: '', bgColor: '', font: 'IBM Plex Sans', headerTitle: '', headerSubtitle: '', logo: '', background: '' }, true);
+    toast('Reset to defaults — reloading…', 'success');
+    setTimeout(() => location.reload(), 700);
+  } catch (e) { handleAdminErr(e); }
 }
 
 window.addEventListener('DOMContentLoaded', init);

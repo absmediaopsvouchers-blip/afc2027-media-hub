@@ -64,7 +64,13 @@ async function loadConfig() {
     ]);
     state.meta = meta;
     state.locations = locations || [];
-    if (meta && meta.event) document.getElementById('brand-sub').textContent = meta.event;
+    // Theme / branding (colours, font, logo, background, header text).
+    await loadTheme();
+    applyLogo(THEME.logo);
+    const titleEl = document.querySelector('.brand-title');
+    if (titleEl && THEME.headerTitle) titleEl.textContent = THEME.headerTitle;
+    const subEl = document.getElementById('brand-sub');
+    if (subEl) subEl.textContent = THEME.headerSubtitle || (meta && meta.event) || '';
     if (!state.form.locationId && state.locations.length) {
       // Default to the first venue that actually offers meals (skips Training etc.).
       const first = state.locations.find((l) => l.allowedMeals && l.allowedMeals.length);

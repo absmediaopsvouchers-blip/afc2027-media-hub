@@ -217,3 +217,76 @@ function catBadge(name) {
   const color = categoryColor(name);
   return `<span class="badge cat-badge" style="color:${esc(color)};background:${esc(color)}1f;border-color:${esc(color)}3d">${esc(name)}</span>`;
 }
+
+/* ---- theme / design (managed via the admin panel) ------------------------- */
+
+const THEME_FONTS = [
+  { name: 'IBM Plex Sans', google: 'IBM+Plex+Sans:wght@400;500;600;700' },
+  { name: 'Inter', google: 'Inter:wght@400;500;600;700' },
+  { name: 'Poppins', google: 'Poppins:wght@400;500;600;700' },
+  { name: 'Montserrat', google: 'Montserrat:wght@400;500;600;700' },
+  { name: 'Roboto', google: 'Roboto:wght@400;500;700' },
+  { name: 'System', google: null },
+];
+
+let THEME = {};
+
+function isHex(v) { return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v); }
+function _hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function _hex(r, g, b) { return '#' + [r, g, b].map((x) => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join(''); }
+function mixHex(hex, target, amt) { const a = _hexRgb(hex), b = _hexRgb(target); return _hex(a[0] + (b[0] - a[0]) * amt, a[1] + (b[1] - a[1]) * amt, a[2] + (b[2] - a[2]) * amt); }
+
+/** Lazily load a Google web font for the chosen family. */
+function ensureFont(name) {
+  const f = THEME_FONTS.find((x) => x.name === name);
+  if (!f || !f.google) return;
+  const id = 'font-' + name.replace(/\s+/g, '-');
+  if (document.getElementById(id)) return;
+  const link = document.createElement('link');
+  link.id = id; link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=' + f.google + '&display=swap';
+  document.head.appendChild(link);
+}
+
+/** Apply theme overrides to CSS variables + page background. Empty fields are ignored. */
+function applyTheme(t) {
+  t = t || {};
+  const s = document.documentElement.style;
+  if (isHex(t.brandColor)) {
+    s.setProperty('--brand', t.brandColor);
+    s.setProperty('--brand-2', mixHex(t.brandColor, '#ffffff', 0.16));
+  }
+  if (isHex(t.accentColor)) {
+    s.setProperty('--accent', t.accentColor);
+    s.setProperty('--accent-press', mixHex(t.accentColor, '#000000', 0.14));
+    s.setProperty('--accent-soft', mixHex(t.accentColor, '#ffffff', 0.88));
+  }
+  if (t.font === 'System') s.setProperty('--font', "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif");
+  else if (t.font) { ensureFont(t.font); s.setProperty('--font', "'" + t.font + "', system-ui, -apple-system, sans-serif"); }
+  if (isHex(t.bgColor)) s.setProperty('--bg', t.bgColor);
+  if (document.body) {
+    if (t.background) {
+      document.body.style.backgroundImage = 'linear-gradient(rgba(255,255,255,.78),rgba(255,255,255,.78)), url("' + t.background + '")';
+      document.body.style.backgroundSize = 'cover';
+      document.body.style.backgroundPosition = 'center';
+      document.body.style.backgroundAttachment = 'fixed';
+    } else {
+      document.body.style.backgroundImage = '';
+    }
+  }
+}
+
+/** Replace the brand mark with a logo image (if provided). */
+function applyLogo(logo) {
+  const mark = document.getElementById('brand-mark');
+  if (!mark || !logo) return;
+  mark.innerHTML = '<img src="' + logo + '" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
+  mark.style.background = 'none';
+  mark.style.boxShadow = 'none';
+}
+
+async function loadTheme() {
+  try { THEME = (await API.get('/theme')) || {}; } catch (e) { THEME = {}; }
+  applyTheme(THEME);
+  return THEME;
+}

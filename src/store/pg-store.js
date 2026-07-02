@@ -127,6 +127,10 @@ async function migrate() {
       name  TEXT NOT NULL,
       color TEXT
     );
+    CREATE TABLE IF NOT EXISTS settings (
+      id   INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      data TEXT NOT NULL DEFAULT '{}'
+    );
   `);
 }
 
@@ -507,6 +511,20 @@ async function deleteCategory(id) {
   return rowCount > 0;
 }
 
+// ---- settings (theme) -------------------------------------------------------
+
+async function getSettings() {
+  const { rows } = await q('SELECT data FROM settings WHERE id = 1');
+  if (!rows[0]) return {};
+  try { return JSON.parse(rows[0].data) || {}; } catch (e) { return {}; }
+}
+
+async function saveSettings(obj) {
+  const data = JSON.stringify(obj || {});
+  await q('INSERT INTO settings (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1', [data]);
+  return obj || {};
+}
+
 module.exports = {
   backend,
   init,
@@ -543,4 +561,6 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  getSettings,
+  saveSettings,
 };

@@ -66,8 +66,9 @@ async function init() {
   const Press = model('Press', new Schema({ id: { type: String, unique: true }, date: String, time: String, team: String, room: String, status: String, note: String }, opts));
   const Transport = model('Transport', new Schema({ id: { type: String, unique: true }, route: String, type: String, from: String, to: String, frequency: String, firstDeparture: String, lastDeparture: String, duration: String, notes: String }, opts));
   const Category = model('Category', new Schema({ id: { type: String, unique: true }, name: String, color: String }, opts));
+  const Settings = model('Settings', new Schema({ key: { type: String, unique: true }, data: { type: Object, default: {} } }, opts));
 
-  models = { Meta, Location, User, Voucher, News, Press, Transport, Category };
+  models = { Meta, Location, User, Voucher, News, Press, Transport, Category, Settings };
 
   // Ensure indexes (incl. the unique voucher constraint) are built.
   await Promise.all(Object.values(models).map((m) => m.init()));
@@ -285,6 +286,18 @@ async function deleteCategory(id) {
   return r.deletedCount > 0;
 }
 
+// ---- settings (theme) -------------------------------------------------------
+
+async function getSettings() {
+  const doc = await models.Settings.findOne({ key: 'theme' }).lean();
+  return (doc && doc.data) || {};
+}
+
+async function saveSettings(obj) {
+  await models.Settings.updateOne({ key: 'theme' }, { $set: { key: 'theme', data: obj || {} } }, { upsert: true });
+  return obj || {};
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 function pick(obj, keys) {
@@ -329,4 +342,6 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  getSettings,
+  saveSettings,
 };

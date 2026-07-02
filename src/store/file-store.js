@@ -292,6 +292,18 @@ async function deleteCategory(id) {
   return true;
 }
 
+// ---- settings (theme) -------------------------------------------------------
+
+async function getSettings() {
+  return data.settings || {};
+}
+
+async function saveSettings(obj) {
+  data.settings = obj || {};
+  persist();
+  return data.settings;
+}
+
 module.exports = {
   backend,
   init,
@@ -328,4 +340,6 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  getSettings,
+  saveSettings,
 };
