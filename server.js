@@ -19,7 +19,7 @@ const path = require('path');
 const os = require('os');
 
 const store = require('./src/store');
-const { router, ADMIN_KEY } = require('./src/routes');
+const { router, ADMIN_KEY, VOLUNTEER_KEY } = require('./src/routes');
 const { eventTimezone, todayInTz } = require('./src/time');
 
 const PORT = process.env.PORT || 3000;
@@ -39,7 +39,7 @@ async function main() {
   // is safe here and avoids maintaining an allowlist across deploys.
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, x-volunteer-key');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
@@ -77,6 +77,7 @@ function printBanner(port) {
   console.log(`  Storage backend : ${store.backend}`);
   console.log(`  Event timezone  : ${eventTimezone()}  (today: ${todayInTz()})`);
   console.log(`  Admin key       : "${ADMIN_KEY}"  (set ADMIN_KEY to change)`);
+  console.log(`  Volunteer key   : "${VOLUNTEER_KEY}"  (set VOLUNTEER_KEY to change) — redeem only`);
   console.log(line);
   console.log('  On this computer:');
   console.log(`     Client app   ->  http://localhost:${port}`);

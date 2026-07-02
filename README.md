@@ -162,6 +162,7 @@ in your cloud host's dashboard. **Nothing is required for local file mode.**
 | `PORT` | no | Port to listen on. Cloud hosts set this automatically. Default `3000`. |
 | `DATABASE_URL` | no | Postgres or Mongo connection string. **Unset → local JSON file store.** |
 | `ADMIN_KEY` | recommended | Protects `/admin` and admin APIs. Default `afc2027-media` — **change it for production.** |
+| `VOLUNTEER_KEY` | recommended | Scoped key for volunteers — unlocks only the voucher redeemer. Default `afc2027-volunteer` — **change it for production.** |
 | `EVENT_TIMEZONE` | no | IANA timezone for the daily calendar-day reset, e.g. `Asia/Riyadh`. Default `Asia/Riyadh`. |
 
 ---
@@ -253,13 +254,16 @@ network so voucher limits stay authoritative.
 ## Admin access
 
 - Open `/admin` and enter the **admin key** (default `afc2027-media`; override
-  with the `ADMIN_KEY` env var).
+  with the `ADMIN_KEY` env var) for full access, or a **volunteer key** (default
+  `afc2027-volunteer`; override with `VOLUNTEER_KEY`) for redeem-only access.
 - The key is sent with admin requests and remembered for the browser session.
-- The CSV export and admin APIs require the same key.
+- Volunteers only see the **Redeemer** tab and can only call `/admin/redeem` —
+  the server rejects a volunteer key on every other admin endpoint (analytics,
+  CSV export, venues/news/press/transport CMS, theme).
 
-> **Security scope.** The admin key is a lightweight gate. Anything internet-facing
+> **Security scope.** These keys are a lightweight gate. Anything internet-facing
 > should run behind **HTTPS** (Render/Fly provide this automatically) and you
-> should set a strong `ADMIN_KEY`.
+> should set strong, distinct values for `ADMIN_KEY` and `VOLUNTEER_KEY`.
 
 ---
 
@@ -280,9 +284,9 @@ network so voucher limits stay authoritative.
 **Admin** (require header `x-admin-key: <key>` or `?key=`)
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/admin/login` | validate the admin key |
+| POST | `/admin/login` | validate a key, returns `{ ok, role }` |
 | GET | `/analytics` | dashboard metrics + live feed |
-| POST | `/admin/redeem` | validate & redeem a voucher (`{ voucherId }`) |
+| POST | `/admin/redeem` | validate & redeem a voucher (`{ voucherId }`) — also accepts `x-volunteer-key` |
 | GET | `/admin/export.csv` | download the full voucher log |
 | POST · PUT · DELETE | `/locations[/:id]` | venue manager |
 | POST · PUT · DELETE | `/news[/:id]` | news manager |

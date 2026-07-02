@@ -90,9 +90,9 @@ function showLogin(err) {
       <div class="card login-card">
         <div class="login-icon">${ICONS.lock}</div>
         <h1>Admin access</h1>
-        <p>Enter the admin key to manage content, run catering redemption and view analytics.</p>
+        <p>Enter your admin or volunteer key. Admin keys unlock the full dashboard; volunteer keys unlock the voucher redeemer only.</p>
         ${err ? `<div class="alert alert-error" style="text-align:left">${ICONS.alert}<div>${esc(err)}</div></div>` : ''}
-        <div class="field"><input class="input" id="login-key" type="password" placeholder="Admin key" autocomplete="current-password"></div>
+        <div class="field"><input class="input" id="login-key" type="password" placeholder="Admin or volunteer key" autocomplete="current-password"></div>
         <button class="btn btn-primary btn-block" id="login-btn">${ICONS.lock}<span>Unlock dashboard</span></button>
       </div>
     </div>`;
@@ -101,11 +101,13 @@ function showLogin(err) {
     const key = document.getElementById('login-key').value;
     if (!key) return;
     try {
-      await API.post('/admin/login', { key });
+      const r = await API.post('/admin/login', { key });
       Admin.setKey(key);
+      Admin.setRole(r.role || 'admin');
+      if (Admin.isVolunteer()) adminState.tab = 'redeem';
       showDashboard();
     } catch (e) {
-      showLogin('Incorrect admin key. Please try again.');
+      showLogin('Incorrect key. Please try again.');
     }
   };
   document.getElementById('login-btn').addEventListener('click', submit);
@@ -114,11 +116,17 @@ function showLogin(err) {
   input.focus();
 }
 
+function visibleTabs() {
+  return Admin.isVolunteer() ? ADMIN_TABS.filter((t) => t.id === 'redeem') : ADMIN_TABS;
+}
+
 function showDashboard() {
   document.getElementById('logout-btn').style.display = '';
+  if (Admin.isVolunteer()) adminState.tab = 'redeem';
+  const tabs = visibleTabs();
   view().innerHTML = `
     <div class="admin-tabs" id="admin-tabs">
-      ${ADMIN_TABS.map((t) => `<button data-atab="${t.id}" class="${t.id === adminState.tab ? 'active' : ''}">${t.label}</button>`).join('')}
+      ${tabs.map((t) => `<button data-atab="${t.id}" class="${t.id === adminState.tab ? 'active' : ''}">${t.label}</button>`).join('')}
     </div>
     <div id="panel"></div>`;
   document.getElementById('admin-tabs').addEventListener('click', (e) => {
@@ -129,6 +137,7 @@ function showDashboard() {
 }
 
 function setTab(tab) {
+  if (!visibleTabs().some((t) => t.id === tab)) return;
   adminState.tab = tab;
   teardownTransients();
   $all('[data-atab]').forEach((b) => b.classList.toggle('active', b.dataset.atab === tab));

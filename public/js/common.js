@@ -10,7 +10,10 @@
 const Admin = {
   key() { return sessionStorage.getItem('mh.adminKey') || ''; },
   setKey(k) { sessionStorage.setItem('mh.adminKey', k); },
-  clear() { sessionStorage.removeItem('mh.adminKey'); },
+  role() { return sessionStorage.getItem('mh.adminRole') || 'admin'; },
+  setRole(r) { sessionStorage.setItem('mh.adminRole', r); },
+  isVolunteer() { return this.role() === 'volunteer'; },
+  clear() { sessionStorage.removeItem('mh.adminKey'); sessionStorage.removeItem('mh.adminRole'); },
 };
 
 const API = {
@@ -21,7 +24,7 @@ const API = {
       headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
-    if (admin) headers['x-admin-key'] = Admin.key();
+    if (admin) headers[Admin.isVolunteer() ? 'x-volunteer-key' : 'x-admin-key'] = Admin.key();
 
     let res;
     try {

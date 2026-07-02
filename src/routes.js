@@ -15,14 +15,17 @@
  *     GET    /api/press-conferences          schedule
  *     GET    /api/transport                  shuttle info
  *
- *   ADMIN  (require x-admin-key header or ?key=)
- *     POST   /api/admin/login               validate the admin key
+ *   ADMIN  (require x-admin-key header or ?key=) — full access
+ *     POST   /api/admin/login               validate a key, returns its role
  *     GET    /api/analytics                 dashboard metrics + live feed
  *     POST   /api/admin/redeem              catering: validate & redeem a voucher
  *     GET    /api/admin/export.csv          download full voucher log (CSV)
  *     POST·PUT·DELETE /api/locations[/:id]  venue manager
  *     POST·PUT·DELETE /api/news[/:id]       news manager
  *     POST·PUT·DELETE /api/press-conferences[/:id]   press manager
+ *
+ *   VOLUNTEER  (require x-volunteer-key header) — redeem only
+ *     POST   /api/admin/redeem              same endpoint as admin, scoped access
  */
 
 const express = require('express');
@@ -36,6 +39,9 @@ const router = express.Router();
 
 // Shared secret for the admin dashboard. Override in production via env var.
 const ADMIN_KEY = process.env.ADMIN_KEY || 'afc2027-media';
+
+// Shared secret for volunteers — scoped to voucher redemption only.
+const VOLUNTEER_KEY = process.env.VOLUNTEER_KEY || 'afc2027-volunteer';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -140,7 +146,17 @@ function requireAdmin(req, res, next) {
   if (key !== ADMIN_KEY) {
     return res.status(401).json({ error: 'Unauthorized — invalid admin key.' });
   }
+  req.role = 'admin';
   next();
+}
+
+/** Gate the redeemer endpoint behind either the admin key or the volunteer key. */
+function requireRedeemAccess(req, res, next) {
+  const adminKey = req.get('x-admin-key') || req.query.key;
+  if (adminKey === ADMIN_KEY) { req.role = 'admin'; return next(); }
+  const volunteerKey = req.get('x-volunteer-key');
+  if (volunteerKey === VOLUNTEER_KEY) { req.role = 'volunteer'; return next(); }
+  return res.status(401).json({ error: 'Unauthorized — invalid key.' });
 }
 
 /** Wrap an async handler so rejections become clean 500s. */
@@ -362,8 +378,9 @@ function shareBaseUrl(req) {
 
 router.post('/admin/login', (req, res) => {
   const key = String(req.body.key || '');
-  if (key !== ADMIN_KEY) return res.status(401).json({ error: 'Incorrect admin key.' });
-  res.json({ ok: true });
+  if (key === ADMIN_KEY) return res.json({ ok: true, role: 'admin' });
+  if (key === VOLUNTEER_KEY) return res.json({ ok: true, role: 'volunteer' });
+  return res.status(401).json({ error: 'Incorrect key.' });
 });
 
 router.get('/analytics', requireAdmin, wrap(async (req, res) => {
@@ -413,7 +430,7 @@ router.get('/analytics', requireAdmin, wrap(async (req, res) => {
 
 // ---- Catering Staff Voucher Redeemer ----------------------------------------
 
-router.post('/admin/redeem', requireAdmin, wrap(async (req, res) => {
+router.post('/admin/redeem', requireRedeemAccess, wrap(async (req, res) => {
   const id = normalizeVoucherId(req.body.voucherId || req.body.id);
   if (!id) return res.status(400).json({ code: 'INVALID', error: 'Please scan or enter a voucher ID.' });
 
@@ -687,4 +704,4 @@ router.delete('/transport/:id', requireAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-module.exports = { router, ADMIN_KEY };
+module.exports = { router, ADMIN_KEY, VOLUNTEER_KEY };
