@@ -54,7 +54,7 @@
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; }
+html { height: 100%; }
 
 body {
   margin: 0;
@@ -64,6 +64,14 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   line-height: 1.5;
+  /* App-shell: pin to the visible viewport height and scroll the content area
+     internally. This keeps the bottom nav from jumping as the mobile browser
+     toolbar shows/hides (uses dvh so it tracks the live visible height). */
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 input, select, button, textarea { font-family: inherit; font-size: 1rem; outline: none; }
@@ -88,8 +96,8 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
    ========================================================================== */
 
 .appbar {
-  position: sticky;
-  top: 0;
+  flex: none;
+  position: relative;
   z-index: 50;
   /* Reserve room for the phone status bar / notch / dynamic island. */
   height: calc(var(--appbar-h) + env(safe-area-inset-top, 0px));
@@ -159,13 +167,16 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
    ========================================================================== */
 
 .view {
+  flex: 1 1 auto;
+  min-height: 0;              /* allow the flex child to shrink & scroll */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  width: 100%;
   max-width: var(--maxw);
-  margin: 0 auto;
-  padding: 22px 16px calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + 28px);
+  margin-inline: auto;        /* centre the content column on wide screens */
+  padding: 22px 16px 36px;
   animation: fadeIn .25s ease;
-}
-@media (min-width: 760px) {
-  .view { padding-bottom: 40px; }
 }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
@@ -543,7 +554,8 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
    ========================================================================== */
 
 .bottomnav {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  flex: none;               /* anchored at the bottom of the app-shell column */
+  z-index: 50;
   min-height: var(--bottomnav-h);
   display: flex;
   background: rgba(255, 255, 255, .96);

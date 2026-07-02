@@ -106,7 +106,14 @@ function go(tab) {
   stopTicketPoll();
   updateNavActive();
   render();
-  window.scrollTo({ top: 0 });
+  scrollViewTop();
+}
+
+/** Scroll the content area (the app-shell scroller) back to the top. */
+function scrollViewTop(smooth) {
+  const v = view();
+  if (v && v.scrollTo) v.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+  else if (v) v.scrollTop = 0;
 }
 
 function updateNavActive() {
@@ -402,7 +409,7 @@ function showTicket(v, registeredNow) {
   document.getElementById('v-form-card').classList.add('hidden');
   const mine = document.getElementById('v-mine');
   if (mine) mine.classList.add('hidden');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  scrollViewTop(true);
   document.getElementById('v-again').addEventListener('click', () => {
     stopTicketPoll();
     document.getElementById('v-result').innerHTML = '';
