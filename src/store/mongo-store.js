@@ -67,8 +67,10 @@ async function init() {
   const Transport = model('Transport', new Schema({ id: { type: String, unique: true }, route: String, type: String, from: String, to: String, frequency: String, firstDeparture: String, lastDeparture: String, duration: String, notes: String }, opts));
   const Category = model('Category', new Schema({ id: { type: String, unique: true }, name: String, color: String }, opts));
   const Settings = model('Settings', new Schema({ key: { type: String, unique: true }, data: { type: Object, default: {} } }, opts));
+  const Tab = model('Tab', new Schema({ id: { type: String, unique: true }, title: String, route: String, content_type: String, content: String, order: Number, permissions: String }, opts));
+  const Audit = model('Audit', new Schema({ id: { type: String, unique: true }, action: String, detail: String, actor: String, at: String }, opts));
 
-  models = { Meta, Location, User, Voucher, News, Press, Transport, Category, Settings };
+  models = { Meta, Location, User, Voucher, News, Press, Transport, Category, Settings, Tab, Audit };
 
   // Ensure indexes (incl. the unique voucher constraint) are built.
   await Promise.all(Object.values(models).map((m) => m.init()));
@@ -202,6 +204,12 @@ async function expireStale(today) {
   await models.Voucher.updateMany({ status: 'Pending', date: { $lt: today } }, { $set: { status: 'Expired' } });
 }
 
+/** Wipe every voucher (Pending, Redeemed and Expired). Returns the count removed. */
+async function resetVouchers() {
+  const r = await models.Voucher.deleteMany({});
+  return r.deletedCount || 0;
+}
+
 // ---- news -------------------------------------------------------------------
 
 async function listNews() {
@@ -286,6 +294,38 @@ async function deleteCategory(id) {
   return r.deletedCount > 0;
 }
 
+// ---- custom client-app tabs ---------------------------------------------------
+
+async function listTabs() {
+  return (await models.Tab.find().sort({ order: 1, title: 1 }).lean()).map(strip);
+}
+
+async function createTab(tab) {
+  await models.Tab.create(tab);
+  return tab;
+}
+
+async function updateTab(id, fields) {
+  const allowed = pick(fields, ['title', 'route', 'content_type', 'content', 'order', 'permissions']);
+  return strip(await models.Tab.findOneAndUpdate({ id }, { $set: allowed }, { new: true }).lean());
+}
+
+async function deleteTab(id) {
+  const r = await models.Tab.deleteOne({ id });
+  return r.deletedCount > 0;
+}
+
+// ---- audit log (admin actions) ------------------------------------------------
+
+async function addAudit(entry) {
+  await models.Audit.create(entry);
+  return entry;
+}
+
+async function listAudit(limit = 30) {
+  return (await models.Audit.find().sort({ at: -1 }).limit(limit).lean()).map(strip);
+}
+
 // ---- settings (theme) -------------------------------------------------------
 
 async function getSettings() {
@@ -326,6 +366,7 @@ module.exports = {
   redeemVoucher,
   listVouchers,
   expireStale,
+  resetVouchers,
   listNews,
   createNews,
   updateNews,
@@ -344,4 +385,10 @@ module.exports = {
   deleteCategory,
   getSettings,
   saveSettings,
+  listTabs,
+  createTab,
+  updateTab,
+  deleteTab,
+  addAudit,
+  listAudit,
 };

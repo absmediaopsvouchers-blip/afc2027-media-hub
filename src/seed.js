@@ -54,6 +54,12 @@ function getSeedData() {
     // Issued vouchers (the audit trail the rules engine checks against).
     vouchers: [],
 
+    // Custom tabs added to the Media Client app via the admin panel.
+    tabs: [],
+
+    // Admin action log (voucher resets, tab changes) shown in the analytics feed.
+    auditLog: [],
+
     // Managed content categories (used by the News feed). Admin-editable so new
     // categories can be added without code changes. Each has a display colour.
     categories: [

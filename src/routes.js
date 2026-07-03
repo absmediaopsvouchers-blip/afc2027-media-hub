@@ -23,6 +23,10 @@
  *     POST·PUT·DELETE /api/locations[/:id]  venue manager
  *     POST·PUT·DELETE /api/news[/:id]       news manager
  *     POST·PUT·DELETE /api/press-conferences[/:id]   press manager
+ *     POST   /api/admin/reset-vouchers      wipe ALL voucher data (needs confirm:true)
+ *     POST·PUT·DELETE /api/admin/tabs[/:id] client-app custom tab manager
+ *     GET    /api/tabs                      custom tabs (public sees "all" tabs;
+ *                                           admin/volunteer keys widen the list)
  *
  *   VOLUNTEER  (require x-volunteer-key header) — redeem only
  *     POST   /api/admin/redeem              same endpoint as admin, scoped access
@@ -157,6 +161,71 @@ function requireRedeemAccess(req, res, next) {
   const volunteerKey = req.get('x-volunteer-key');
   if (volunteerKey === VOLUNTEER_KEY) { req.role = 'volunteer'; return next(); }
   return res.status(401).json({ error: 'Unauthorized — invalid key.' });
+}
+
+/** Record an admin action in the audit log (best-effort — never blocks the response). */
+async function logAudit(action, detail, actor) {
+  try {
+    await store.addAudit({
+      id: uid('LOG'),
+      action,
+      detail: String(detail || '').slice(0, 300),
+      actor: String(actor || 'admin').slice(0, 80),
+      at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[audit] failed to record action:', err.message);
+  }
+}
+
+// ---- custom client-app tabs ---------------------------------------------------
+const TAB_CONTENT_TYPES = ['static', 'feed', 'external-link'];
+const TAB_PERMISSIONS = ['all', 'admin', 'volunteer'];
+
+/** Validate/normalise a submitted tab. Partial=true keeps only provided fields. */
+function sanitizeTab(body, partial) {
+  const t = {};
+  if (!partial || body.title !== undefined) {
+    const title = String(body.title || '').trim().slice(0, 60);
+    if (!title) return { ok: false, error: 'Please enter a tab title.' };
+    t.title = title;
+  }
+  if (!partial || body.route !== undefined) {
+    let route = String(body.route || '').trim().toLowerCase();
+    if (!route && t.title) route = '/' + t.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!/^\/[a-z0-9\-\/]{1,60}$/.test(route)) {
+      return { ok: false, error: 'Route must look like /custom-tab (letters, numbers, dashes).' };
+    }
+    t.route = route;
+  }
+  if (!partial || body.content_type !== undefined) {
+    const ct = String(body.content_type || 'static').trim();
+    if (!TAB_CONTENT_TYPES.includes(ct)) {
+      return { ok: false, error: `content_type must be one of: ${TAB_CONTENT_TYPES.join(', ')}.` };
+    }
+    t.content_type = ct;
+  }
+  if (!partial || body.content !== undefined) {
+    const content = String(body.content || '');
+    if (content.length > 200 * 1024) return { ok: false, error: 'Tab content is too large (max 200 KB).' };
+    t.content = content;
+  }
+  if (!partial || body.order !== undefined) {
+    const order = Number(body.order);
+    t.order = Number.isFinite(order) ? Math.round(order) : 0;
+  }
+  if (!partial || body.permissions !== undefined) {
+    const perm = String(body.permissions || 'all').trim().toLowerCase();
+    if (!TAB_PERMISSIONS.includes(perm)) {
+      return { ok: false, error: `permissions must be one of: ${TAB_PERMISSIONS.join(', ')}.` };
+    }
+    t.permissions = perm;
+  }
+  return { ok: true, tab: t };
+}
+
+function sortTabs(list) {
+  return list.slice().sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.title).localeCompare(String(b.title)));
 }
 
 /** Wrap an async handler so rejections become clean 500s. */
@@ -333,6 +402,21 @@ router.get('/theme', wrap(async (req, res) => {
   res.json(await store.getSettings());
 }));
 
+// Custom tabs for the Media Client app. Public callers only see tabs marked
+// "all"; presenting a valid admin/volunteer key widens the visible set.
+router.get('/tabs', wrap(async (req, res) => {
+  const adminKey = req.get('x-admin-key') || req.query.key;
+  const volunteerKey = req.get('x-volunteer-key');
+  const role = adminKey === ADMIN_KEY ? 'admin' : volunteerKey === VOLUNTEER_KEY ? 'volunteer' : 'public';
+  const tabs = sortTabs(await store.listTabs()).filter((t) => {
+    const perm = t.permissions || 'all';
+    if (perm === 'all') return true;
+    if (role === 'admin') return true; // admins see everything
+    return perm === role;
+  });
+  res.json(tabs);
+}));
+
 // A shareable QR code that opens the Media Client app. The encoded URL is the
 // address the app is actually being served on (the request Host), so it works
 // both on the venue LAN and once deployed to the cloud — no hardcoding. When
@@ -412,6 +496,10 @@ router.get('/analytics', requireAdmin, wrap(async (req, res) => {
     .sort((a, b) => new Date(b.activityAt) - new Date(a.activityAt))
     .slice(0, 30);
 
+  // Admin action log (voucher resets, tab changes) for the activity feed.
+  let audit = [];
+  try { audit = await store.listAudit(20); } catch (err) { /* older DBs may lack the table */ }
+
   res.json({
     total: vouchers.length,
     issuedToday,
@@ -424,8 +512,64 @@ router.get('/analytics', requireAdmin, wrap(async (req, res) => {
     byStatus,
     byLocation,
     recent,
+    audit,
     today,
   });
+}));
+
+// ---- Voucher reset (danger zone) ---------------------------------------------
+// Wipes ALL voucher data (Pending, Redeemed, Expired). Counters and the live
+// feed are derived from vouchers, so they reset with it. Users, venues, news
+// and settings are untouched. Requires an explicit confirm flag.
+
+router.post('/admin/reset-vouchers', requireAdmin, wrap(async (req, res) => {
+  if (req.body.confirm !== true && req.body.confirm !== 'true') {
+    return res.status(400).json({
+      code: 'CONFIRM_REQUIRED',
+      error: 'Reset not performed — send confirm: true to wipe all voucher data.',
+    });
+  }
+  const removed = await store.resetVouchers();
+  await logAudit('reset-vouchers', `Cleared ${removed} voucher(s) and reset analytics counters.`, req.body.admin);
+  console.log(`[admin] voucher data reset — ${removed} voucher(s) removed.`);
+  res.json({ ok: true, removed });
+}));
+
+// ---- Client-app tab manager ----------------------------------------------------
+
+router.post('/admin/tabs', requireAdmin, wrap(async (req, res) => {
+  const s = sanitizeTab(req.body || {}, false);
+  if (!s.ok) return res.status(400).json({ error: s.error });
+  const tab = { id: uid('TAB'), content: '', order: 0, permissions: 'all', ...s.tab };
+  const existing = await store.listTabs();
+  if (existing.some((t) => t.route === tab.route)) {
+    return res.status(409).json({ error: `A tab already uses the route ${tab.route}.` });
+  }
+  await store.createTab(tab);
+  await logAudit('tab-added', `Added client tab “${tab.title}” (${tab.route}).`, req.body.admin);
+  res.status(201).json({ ok: true, tab, tabs: sortTabs(await store.listTabs()) });
+}));
+
+router.put('/admin/tabs/:id', requireAdmin, wrap(async (req, res) => {
+  const s = sanitizeTab(req.body || {}, true);
+  if (!s.ok) return res.status(400).json({ error: s.error });
+  if (s.tab.route) {
+    const clash = (await store.listTabs()).find((t) => t.route === s.tab.route && t.id !== req.params.id);
+    if (clash) return res.status(409).json({ error: `A tab already uses the route ${s.tab.route}.` });
+  }
+  const updated = await store.updateTab(req.params.id, s.tab);
+  if (!updated) return res.status(404).json({ error: 'Tab not found.' });
+  await logAudit('tab-updated', `Updated client tab “${updated.title}” (${updated.route}).`, req.body.admin);
+  res.json({ ok: true, tab: updated, tabs: sortTabs(await store.listTabs()) });
+}));
+
+router.delete('/admin/tabs/:id', requireAdmin, wrap(async (req, res) => {
+  const tabs = await store.listTabs();
+  const tab = tabs.find((t) => t.id === req.params.id);
+  const ok = await store.deleteTab(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Tab not found.' });
+  await logAudit('tab-removed', `Removed client tab “${tab ? tab.title : req.params.id}”.`);
+  res.json({ ok: true, tabs: sortTabs(await store.listTabs()) });
 }));
 
 // ---- Catering Staff Voucher Redeemer ----------------------------------------

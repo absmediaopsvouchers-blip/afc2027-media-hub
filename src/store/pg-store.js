@@ -131,6 +131,22 @@ async function migrate() {
       id   INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       data TEXT NOT NULL DEFAULT '{}'
     );
+    CREATE TABLE IF NOT EXISTS tabs (
+      id           TEXT PRIMARY KEY,
+      title        TEXT NOT NULL,
+      route        TEXT NOT NULL,
+      content_type TEXT NOT NULL DEFAULT 'static',
+      content      TEXT,
+      "order"      INTEGER NOT NULL DEFAULT 0,
+      permissions  TEXT NOT NULL DEFAULT 'all'
+    );
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id     TEXT PRIMARY KEY,
+      action TEXT NOT NULL,
+      detail TEXT,
+      actor  TEXT,
+      at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 }
 
@@ -355,6 +371,12 @@ async function expireStale(today) {
   await q("UPDATE vouchers SET status = 'Expired' WHERE status = 'Pending' AND date < $1", [today]);
 }
 
+/** Wipe every voucher (Pending, Redeemed and Expired). Returns the count removed. */
+async function resetVouchers() {
+  const { rowCount } = await q('DELETE FROM vouchers');
+  return rowCount;
+}
+
 // ---- news -------------------------------------------------------------------
 
 async function listNews() {
@@ -511,6 +533,62 @@ async function deleteCategory(id) {
   return rowCount > 0;
 }
 
+// ---- custom client-app tabs ---------------------------------------------------
+
+function toTab(r) {
+  return { id: r.id, title: r.title, route: r.route, content_type: r.content_type, content: r.content, order: r.order, permissions: r.permissions };
+}
+
+async function listTabs() {
+  const { rows } = await q('SELECT * FROM tabs ORDER BY "order", title');
+  return rows.map(toTab);
+}
+
+async function createTab(tab) {
+  await q('INSERT INTO tabs (id, title, route, content_type, content, "order", permissions) VALUES ($1,$2,$3,$4,$5,$6,$7)', [
+    tab.id, tab.title, tab.route, tab.content_type, tab.content, tab.order, tab.permissions,
+  ]);
+  return tab;
+}
+
+async function updateTab(id, fields) {
+  const colMap = { title: 'title', route: 'route', content_type: 'content_type', content: 'content', order: '"order"', permissions: 'permissions' };
+  const sets = [];
+  const vals = [];
+  for (const [f, col] of Object.entries(colMap)) {
+    if (fields[f] !== undefined) {
+      vals.push(fields[f]);
+      sets.push(`${col} = $${vals.length}`);
+    }
+  }
+  if (!sets.length) {
+    const { rows } = await q('SELECT * FROM tabs WHERE id = $1', [id]);
+    return rows[0] ? toTab(rows[0]) : null;
+  }
+  vals.push(id);
+  const { rows } = await q(`UPDATE tabs SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING *`, vals);
+  return rows[0] ? toTab(rows[0]) : null;
+}
+
+async function deleteTab(id) {
+  const { rowCount } = await q('DELETE FROM tabs WHERE id = $1', [id]);
+  return rowCount > 0;
+}
+
+// ---- audit log (admin actions) ------------------------------------------------
+
+async function addAudit(entry) {
+  await q('INSERT INTO audit_log (id, action, detail, actor, at) VALUES ($1,$2,$3,$4,$5)', [
+    entry.id, entry.action, entry.detail, entry.actor, entry.at,
+  ]);
+  return entry;
+}
+
+async function listAudit(limit = 30) {
+  const { rows } = await q('SELECT * FROM audit_log ORDER BY at DESC LIMIT $1', [limit]);
+  return rows.map((r) => ({ id: r.id, action: r.action, detail: r.detail, actor: r.actor, at: iso(r.at) }));
+}
+
 // ---- settings (theme) -------------------------------------------------------
 
 async function getSettings() {
@@ -545,6 +623,7 @@ module.exports = {
   redeemVoucher,
   listVouchers,
   expireStale,
+  resetVouchers,
   listNews,
   createNews,
   updateNews,
@@ -563,4 +642,10 @@ module.exports = {
   deleteCategory,
   getSettings,
   saveSettings,
+  listTabs,
+  createTab,
+  updateTab,
+  deleteTab,
+  addAudit,
+  listAudit,
 };

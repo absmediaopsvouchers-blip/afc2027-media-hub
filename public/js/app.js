@@ -13,6 +13,20 @@ const TABS = [
   { id: 'transport', label: 'Transport', icon: 'bus' },
 ];
 
+// Admin-managed custom tabs (GET /api/tabs) are appended after the built-ins.
+const CUSTOM_TAB_ICON = { 'static': 'file', 'feed': 'news', 'external-link': 'arrow' };
+
+function customTabId(t) { return 'ct-' + t.id; }
+
+function allTabs() {
+  return TABS.concat((state.customTabs || []).map((t) => ({
+    id: customTabId(t),
+    label: t.title,
+    icon: CUSTOM_TAB_ICON[t.content_type] || 'file',
+    custom: t,
+  })));
+}
+
 // Returning users only enter their email — we cache it locally so the form is
 // pre-filled and the accreditation field stays hidden on subsequent visits.
 const EMAIL_KEY = 'mh.email';
@@ -23,6 +37,7 @@ const VOUCHERS_KEY = 'mh.vouchers';
 const state = {
   tab: 'voucher',
   locations: [],
+  customTabs: [], // admin-managed extra tabs
   meta: null,
   ticketPoll: null, // interval id for live voucher-status polling
   myVouchers: [], // this user's vouchers for today (server-backed + cached)
@@ -58,12 +73,19 @@ function init() {
 
 async function loadConfig() {
   try {
-    const [meta, locations] = await Promise.all([
+    const [meta, locations, customTabs] = await Promise.all([
       API.get('/meta').catch(() => null),
       API.get('/locations').catch(() => []),
+      API.get('/tabs').catch(() => []),
     ]);
     state.meta = meta;
     state.locations = locations || [];
+    state.customTabs = customTabs || [];
+    // Rebuild navs now the custom tabs are known, and honour a hash pointing
+    // at one of them (buildNavs ran before they were loaded).
+    buildNavs();
+    const hash = location.hash.replace('#', '');
+    if (allTabs().some((t) => t.id === hash)) state.tab = hash;
     // Theme / branding (colours, font, logo, background, header text).
     await loadTheme();
     applyLogo(THEME.logo);
@@ -90,17 +112,29 @@ async function loadConfig() {
 function buildNavs() {
   const top = document.getElementById('topnav');
   const bottom = document.getElementById('bottomnav');
-  top.innerHTML = TABS.map((t) =>
-    `<button data-tab="${t.id}">${ICONS[t.icon]}<span>${t.label}</span></button>`).join('');
-  bottom.innerHTML = TABS.map((t) =>
-    `<button data-tab="${t.id}">${ICONS[t.icon]}<span>${t.label}</span></button>`).join('');
-  [top, bottom].forEach((nav) => nav.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-tab]');
-    if (b) go(b.dataset.tab);
-  }));
+  const tabs = allTabs();
+  const btn = (t) => `<button data-tab="${esc(t.id)}">${ICONS[t.icon] || ICONS.file}<span>${esc(t.label)}</span></button>`;
+  top.innerHTML = tabs.map(btn).join('');
+  bottom.innerHTML = tabs.map(btn).join('');
+  [top, bottom].forEach((nav) => {
+    if (nav.dataset.wired) return; // rebuilds only replace the buttons
+    nav.dataset.wired = '1';
+    nav.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-tab]');
+      if (b) go(b.dataset.tab);
+    });
+  });
+  updateNavActive();
 }
 
 function go(tab) {
+  // External-link tabs open in a new browser tab instead of navigating away.
+  const def = allTabs().find((t) => t.id === tab);
+  if (def && def.custom && def.custom.content_type === 'external-link') {
+    const w = window.open(def.custom.content, '_blank', 'noopener');
+    if (!w) toast('Pop-up blocked — allow pop-ups to open the link.', 'error');
+    return;
+  }
   state.tab = tab;
   location.hash = tab;
   stopTicketPoll();
@@ -133,6 +167,28 @@ function render() {
   if (state.tab === 'press') return renderPress();
   if (state.tab === 'news') return renderNews();
   if (state.tab === 'transport') return renderTransport();
+  const def = allTabs().find((t) => t.id === state.tab && t.custom);
+  if (def) return renderCustomTab(def.custom);
+  // Unknown tab (e.g. a custom tab that was deleted) — fall back home.
+  state.tab = 'voucher';
+  updateNavActive();
+  return renderVoucher();
+}
+
+/* ---- admin-managed custom tabs --------------------------------------------- */
+
+function renderCustomTab(t) {
+  if (t.content_type === 'feed') return renderNews(t.title, 'Live operational updates and official announcements.');
+  if (t.content_type === 'external-link') {
+    view().innerHTML = `
+      ${pageHead(t.title, 'This tab links to an external site.')}
+      <div class="card card-pad" style="text-align:center">
+        <a class="btn btn-primary" href="${esc(t.content)}" target="_blank" rel="noopener">${ICONS.arrow}<span>Open ${esc(t.title)}</span></a>
+      </div>`;
+    return;
+  }
+  // Static content — HTML authored by the event admins in the dashboard.
+  view().innerHTML = `${pageHead(t.title, '')}<div class="card card-pad custom-tab-body">${t.content || '<div class="muted">Nothing here yet.</div>'}</div>`;
 }
 
 /* ---- event-timezone day labels ------------------------------------------- */
@@ -581,8 +637,8 @@ async function renderPress() {
    TAB 3 — News & Media Updates
    ========================================================================== */
 
-async function renderNews() {
-  const head = pageHead('News & Media Updates', 'Live operational updates and official announcements.');
+async function renderNews(title, sub) {
+  const head = pageHead(title || 'News & Media Updates', sub || 'Live operational updates and official announcements.');
   view().innerHTML = head + loadingHtml();
   let list;
   try { list = await API.get('/news'); }

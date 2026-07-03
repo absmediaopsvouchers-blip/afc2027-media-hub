@@ -179,6 +179,14 @@ async function expireStale(today) {
   if (changed) persist();
 }
 
+/** Wipe every voucher (Pending, Redeemed and Expired). Returns the count removed. */
+async function resetVouchers() {
+  const removed = data.vouchers.length;
+  data.vouchers = [];
+  persist();
+  return removed;
+}
+
 // ---- news -------------------------------------------------------------------
 
 async function listNews() {
@@ -292,6 +300,50 @@ async function deleteCategory(id) {
   return true;
 }
 
+// ---- custom client-app tabs ---------------------------------------------------
+
+async function listTabs() {
+  return (data.tabs || []).slice();
+}
+
+async function createTab(tab) {
+  if (!data.tabs) data.tabs = [];
+  data.tabs.push(tab);
+  persist();
+  return tab;
+}
+
+async function updateTab(id, fields) {
+  const tab = (data.tabs || []).find((t) => t.id === id);
+  if (!tab) return null;
+  Object.assign(tab, fields);
+  persist();
+  return tab;
+}
+
+async function deleteTab(id) {
+  const before = (data.tabs || []).length;
+  data.tabs = (data.tabs || []).filter((t) => t.id !== id);
+  if (data.tabs.length === before) return false;
+  persist();
+  return true;
+}
+
+// ---- audit log (admin actions) ------------------------------------------------
+
+async function addAudit(entry) {
+  if (!data.auditLog) data.auditLog = [];
+  data.auditLog.push(entry);
+  // Keep the log bounded so data.json never grows unbounded.
+  if (data.auditLog.length > 200) data.auditLog = data.auditLog.slice(-200);
+  persist();
+  return entry;
+}
+
+async function listAudit(limit = 30) {
+  return (data.auditLog || []).slice(-limit).reverse();
+}
+
 // ---- settings (theme) -------------------------------------------------------
 
 async function getSettings() {
@@ -324,6 +376,7 @@ module.exports = {
   redeemVoucher,
   listVouchers,
   expireStale,
+  resetVouchers,
   listNews,
   createNews,
   updateNews,
@@ -342,4 +395,10 @@ module.exports = {
   deleteCategory,
   getSettings,
   saveSettings,
+  listTabs,
+  createTab,
+  updateTab,
+  deleteTab,
+  addAudit,
+  listAudit,
 };

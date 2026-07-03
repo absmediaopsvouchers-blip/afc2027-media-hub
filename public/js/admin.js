@@ -18,7 +18,9 @@ const ADMIN_TABS = [
   { id: 'categories', label: 'Categories' },
   { id: 'press', label: 'Press' },
   { id: 'transport', label: 'Transport' },
+  { id: 'apptabs', label: 'App Tabs' },
   { id: 'design', label: 'Design' },
+  { id: 'reset', label: 'Reset' },
 ];
 const NEWS_CATS = ['Announcement', 'Alert', 'Operations', 'Transport', 'Catering'];
 const PC_STATUS = ['Scheduled', 'Live', 'Delayed', 'Concluded'];
@@ -42,6 +44,7 @@ const adminState = {
   venues: [],
   transport: [],
   categories: [],
+  appTabs: [],
   theme: null,
   pollTimer: null,
   scanner: null, // { stream, video, timer }
@@ -158,7 +161,9 @@ function renderPanel() {
   if (adminState.tab === 'categories') return renderCategoriesMgr();
   if (adminState.tab === 'press') return renderPressMgr();
   if (adminState.tab === 'transport') return renderTransportMgr();
+  if (adminState.tab === 'apptabs') return renderAppTabsMgr();
   if (adminState.tab === 'design') return renderDesignMgr();
+  if (adminState.tab === 'reset') return renderResetMgr();
 }
 
 function handleAdminErr(e) {
@@ -258,7 +263,30 @@ function overviewHtml(a) {
     <div class="section-label">Live voucher feed</div>
     <div class="card feed">
       ${a.recent && a.recent.length ? a.recent.map(feedItem).join('') : '<div class="empty" style="padding:28px">No vouchers issued yet.</div>'}
-    </div>`;
+    </div>
+
+    ${a.audit && a.audit.length ? `
+    <div class="section-label">Admin activity</div>
+    <div class="card feed">${a.audit.map(auditItem).join('')}</div>` : ''}`;
+}
+
+const AUDIT_LABEL = {
+  'reset-vouchers': 'Voucher reset',
+  'tab-added': 'Tab added',
+  'tab-updated': 'Tab updated',
+  'tab-removed': 'Tab removed',
+};
+
+function auditItem(e) {
+  const danger = e.action === 'reset-vouchers';
+  return `<div class="feed-item">
+    <div class="feed-dot ${danger ? 't-Stadium' : 't-MMC'}">${danger ? '!' : '⚙'}</div>
+    <div class="feed-main">
+      <div class="f-email">${esc(AUDIT_LABEL[e.action] || e.action)} · ${esc(e.actor || 'admin')}</div>
+      <div class="f-meta">${esc(e.detail || '')}</div>
+    </div>
+    <div class="feed-right"><div class="feed-time">${esc(fmtDateTime(e.at))}</div></div>
+  </div>`;
 }
 
 function metric(icon, cls, value, label, sub) {
@@ -1074,6 +1102,193 @@ async function deleteCategory(id) {
   if (!confirm('Delete this category? Existing news keeps its label but loses the colour.')) return;
   try { await API.del('/categories/' + id, true); toast('Category deleted.', 'success'); await loadCategoriesAdmin(); }
   catch (e) { handleAdminErr(e); }
+}
+
+/* =============================================================================
+   APP TABS — add / customise tabs in the Media Client app
+   ========================================================================== */
+
+const TAB_TYPES = [
+  { v: 'static', label: 'Static content (HTML)' },
+  { v: 'feed', label: 'News feed' },
+  { v: 'external-link', label: 'External link' },
+];
+const TAB_PERMS = [
+  { v: 'all', label: 'Everyone' },
+  { v: 'admin', label: 'Admins only' },
+  { v: 'volunteer', label: 'Volunteers only' },
+];
+const TAB_TYPE_LABEL = { 'static': 'Static', 'feed': 'Feed', 'external-link': 'Link' };
+
+async function renderAppTabsMgr() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <div class="admin-head">
+      <h2>Client app tabs</h2>
+      <button class="btn btn-primary btn-sm" id="tab-add">${ICONS.plus}<span>Add tab</span></button>
+    </div>
+    <p class="mgr-note">${ICONS.info}<span>Custom tabs appear in the Media Client app alongside Voucher / Press / News / Transport. Use <strong>Order</strong> to position them, and <strong>Visible to</strong> to hide a tab from the public app. Changes are logged in the Overview activity feed.</span></p>
+    <div id="tab-editor"></div>
+    <div class="card" id="tab-list">${loadingHtml()}</div>`;
+  document.getElementById('tab-add').addEventListener('click', () => openTabEditor(null));
+  await loadAppTabs();
+}
+
+async function loadAppTabs() {
+  try { adminState.appTabs = await API.get('/tabs', true); }
+  catch (e) { const el = document.getElementById('tab-list'); if (el) el.innerHTML = errorHtml(e.message); return; }
+  renderAppTabList();
+}
+
+function renderAppTabList() {
+  const el = document.getElementById('tab-list');
+  if (!el) return;
+  const list = adminState.appTabs;
+  if (!list.length) { el.innerHTML = '<div class="empty" style="padding:28px">No custom tabs yet. Add your first tab.</div>'; return; }
+  el.innerHTML = list.map((t) => {
+    const perm = TAB_PERMS.find((p) => p.v === (t.permissions || 'all'));
+    return `<div class="mgr-item">
+      <div class="mgr-main">
+        <div class="mgr-title">
+          <span class="badge badge-blue">${esc(TAB_TYPE_LABEL[t.content_type] || t.content_type)}</span>
+          ${t.permissions && t.permissions !== 'all' ? `<span class="badge badge-amber">${esc(perm ? perm.label : t.permissions)}</span>` : ''}
+          <span>${esc(t.title)}</span>
+        </div>
+        <div class="mgr-sub">order ${esc(t.order || 0)} · <span class="mono">${esc(t.route)}</span>${t.content_type === 'external-link' && t.content ? ` · ${esc(t.content)}` : ''}</div>
+      </div>
+      <div class="mgr-actions">
+        <button class="btn btn-ghost btn-icon" title="Edit" data-edit="${esc(t.id)}">${ICONS.edit}</button>
+        <button class="btn btn-danger btn-icon" title="Delete" data-del="${esc(t.id)}">${ICONS.trash}</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-edit]').forEach((b) =>
+    b.addEventListener('click', () => openTabEditor(adminState.appTabs.find((t) => t.id === b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach((b) =>
+    b.addEventListener('click', () => deleteAppTab(b.dataset.del)));
+}
+
+function tabContentField(type, content) {
+  if (type === 'feed') {
+    return '<div class="muted" style="font-size:.9rem;padding:4px 2px">This tab shows the live News feed — no content needed.</div>';
+  }
+  if (type === 'external-link') {
+    return `<input class="input" id="tab-content" type="url" value="${esc(content || '')}" placeholder="https://example.com/media-guide">`;
+  }
+  return `<textarea class="textarea" id="tab-content" placeholder="&lt;h1&gt;Welcome to the Custom Tab&lt;/h1&gt;">${esc(content || '')}</textarea>`;
+}
+
+function openTabEditor(item) {
+  const ed = document.getElementById('tab-editor');
+  const it = item || { title: '', route: '', content_type: 'static', content: '', order: (adminState.appTabs.length + 1) * 10, permissions: 'all' };
+  ed.innerHTML = `
+    <div class="editor">
+      <div class="row2">
+        <div class="field"><label>Title</label>
+          <input class="input" id="tab-title" value="${esc(it.title)}" placeholder="e.g. Media Guide"></div>
+        <div class="field"><label>Route <span class="hint">— leave blank to auto-build from the title</span></label>
+          <input class="input mono" id="tab-route" value="${esc(it.route)}" placeholder="/media-guide"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Content type</label>
+          <select class="select" id="tab-type">${TAB_TYPES.map((t) => `<option value="${t.v}" ${t.v === it.content_type ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
+        <div class="field"><label>Visible to</label>
+          <select class="select" id="tab-perm">${TAB_PERMS.map((p) => `<option value="${p.v}" ${p.v === (it.permissions || 'all') ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Order <span class="hint">— lower numbers appear first</span></label>
+        <input class="input" id="tab-order" type="number" value="${esc(it.order || 0)}" style="max-width:140px"></div>
+      <div class="field"><label>Content</label><div id="tab-content-wrap">${tabContentField(it.content_type, it.content)}</div></div>
+      <div class="editor-actions">
+        <button class="btn btn-ghost btn-sm" id="tab-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="tab-save">${ICONS.check}<span>${item ? 'Save changes' : 'Add tab'}</span></button>
+      </div>
+    </div>`;
+  ed.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('tab-type').addEventListener('change', (e) => {
+    const cur = document.getElementById('tab-content');
+    document.getElementById('tab-content-wrap').innerHTML = tabContentField(e.target.value, cur ? cur.value : '');
+  });
+  document.getElementById('tab-cancel').addEventListener('click', () => { ed.innerHTML = ''; });
+  document.getElementById('tab-save').addEventListener('click', () => saveAppTab(item ? item.id : null));
+  document.getElementById('tab-title').focus();
+}
+
+async function saveAppTab(id) {
+  const contentEl = document.getElementById('tab-content');
+  const payload = {
+    title: val('tab-title').trim(),
+    route: val('tab-route').trim(),
+    content_type: val('tab-type'),
+    content: contentEl ? contentEl.value : '',
+    order: Number(val('tab-order')) || 0,
+    permissions: val('tab-perm'),
+  };
+  if (!payload.title) { toast('Please enter a tab title.', 'error'); return; }
+  if (payload.content_type === 'external-link' && !/^https?:\/\//i.test(payload.content.trim())) {
+    toast('External-link tabs need a full URL (https://…).', 'error');
+    return;
+  }
+  try {
+    const r = id
+      ? await API.put('/admin/tabs/' + id, payload, true)
+      : await API.post('/admin/tabs', payload, true);
+    adminState.appTabs = r.tabs || [];
+    document.getElementById('tab-editor').innerHTML = '';
+    toast(id ? 'Tab saved.' : 'Tab added — it is now live in the client app.', 'success');
+    renderAppTabList();
+  } catch (e) { handleAdminErr(e); }
+}
+
+async function deleteAppTab(id) {
+  if (!confirm('Remove this tab from the client app?')) return;
+  try {
+    const r = await API.del('/admin/tabs/' + id, true);
+    adminState.appTabs = r.tabs || [];
+    toast('Tab removed.', 'success');
+    renderAppTabList();
+  } catch (e) { handleAdminErr(e); }
+}
+
+/* =============================================================================
+   RESET — wipe all voucher data (danger zone)
+   ========================================================================== */
+
+function renderResetMgr() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <div class="admin-head"><h2>Reset voucher data</h2></div>
+    <div class="card card-pad" style="border-color:#e5b6b6">
+      <div class="alert alert-error" style="margin-bottom:14px">${ICONS.alert}
+        <div><strong>Danger zone.</strong> This permanently deletes <strong>every voucher</strong> — Pending, Redeemed and Expired — and resets all counters and the live analytics feed. Registered media, venues, news, press conferences, transport and design settings are kept. This cannot be undone.</div>
+      </div>
+      <div class="field">
+        <label for="reset-confirm">Type <strong>RESET</strong> to confirm</label>
+        <input class="input mono" id="reset-confirm" autocomplete="off" placeholder="RESET" style="max-width:240px">
+      </div>
+      <button class="btn btn-danger" id="reset-go" disabled>${ICONS.trash}<span>Clear all voucher data</span></button>
+      <p class="mgr-note" style="margin-top:14px">${ICONS.info}<span>Every reset is recorded in the Overview <strong>Admin activity</strong> feed with a timestamp, for accountability.</span></p>
+    </div>`;
+
+  const input = document.getElementById('reset-confirm');
+  const btn = document.getElementById('reset-go');
+  input.addEventListener('input', () => { btn.disabled = input.value.trim() !== 'RESET'; });
+  btn.addEventListener('click', doResetVouchers);
+}
+
+async function doResetVouchers() {
+  if (!confirm('Final check: permanently delete ALL voucher data? This cannot be undone.')) return;
+  const btn = document.getElementById('reset-go');
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px;margin:0"></span><span>Resetting…</span>`;
+  try {
+    const r = await API.post('/admin/reset-vouchers', { confirm: true }, true);
+    toast(`Voucher data cleared (${r.removed} removed).`, 'success');
+    renderResetMgr();
+  } catch (e) {
+    handleAdminErr(e);
+    btn.disabled = false;
+    btn.innerHTML = `${ICONS.trash}<span>Clear all voucher data</span>`;
+  }
 }
 
 /* =============================================================================
