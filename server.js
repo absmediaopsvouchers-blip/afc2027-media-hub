@@ -15,6 +15,7 @@
 require('./src/env'); // load .env into process.env before anything reads it
 
 const express = require('express');
+const helmet = require('helmet');
 const path = require('path');
 const os = require('os');
 
@@ -25,6 +26,15 @@ const { eventTimezone, todayInTz } = require('./src/time');
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
+
+// CORS allowlist (R-7): comma-separated origins allowed to call the API from a
+// browser (e.g. the Central Dashboard). The Media Hub's own pages are
+// same-origin and don't need this. Unset = no cross-origin access (secure
+// default) — set ALLOWED_ORIGINS on the host to let the Dashboard read it.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 async function main() {
   // Refuse to boot without real keys (R-2). There are no built-in defaults, so
@@ -44,14 +54,40 @@ async function main() {
   // real client IP (X-Forwarded-For) rather than the proxy's.
   app.set('trust proxy', 1);
 
-  // CORS: the API is read directly from the browser by other AFC 2027 tools
-  // on different origins (e.g. the Central Dashboard). No cookies/credentials
-  // are used — admin auth is a bearer-style header — so a permissive origin
-  // is safe here and avoids maintaining an allowlist across deploys.
+  // Security headers (R-10). CSP is scoped to what the app actually loads:
+  // scripts from self + the jsdelivr QR CDN, styles inline (the UI sets style
+  // attributes and CSS vars), fonts from Google, images as data/blob URLs.
+  // CORP is 'cross-origin' so the Dashboard can still fetch the JSON API.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+          imgSrc: ["'self'", 'data:', 'blob:'],
+          connectSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'self'"],
+        },
+      },
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
+
+  // CORS allowlist (R-7): reflect only known origins, never '*'. No cookies are
+  // used (auth is a header), so this simply controls which sites' JS may read
+  // the API cross-origin.
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, x-volunteer-key');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    const origin = req.get('origin');
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, x-volunteer-key');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    }
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });

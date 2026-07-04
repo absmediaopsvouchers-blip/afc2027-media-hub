@@ -26,6 +26,10 @@ services:
         sync: false # scoped key for volunteers (redeem-only) — set in the dashboard
       - key: EVENT_TIMEZONE
         value: Asia/Riyadh
+      # CORS allowlist (R-7): set to the Dashboard's origin so it can read the
+      # API. Blank/unset forbids all cross-origin browser access.
+      - key: ALLOWED_ORIGINS
+        sync: false
       - key: NODE_VERSION
         value: "20"
 

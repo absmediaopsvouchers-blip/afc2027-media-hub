@@ -15,7 +15,7 @@
  *     GET    /api/press-conferences          schedule
  *     GET    /api/transport                  shuttle info
  *
- *   ADMIN  (require x-admin-key header or ?key=) — full access
+ *   ADMIN  (require x-admin-key header) — full access
  *     POST   /api/admin/login               validate a key, returns its role
  *     GET    /api/analytics                 dashboard metrics + live feed
  *     POST   /api/admin/redeem              catering: validate & redeem a voucher
@@ -163,9 +163,13 @@ function normalizeVoucherId(raw) {
   return s.toUpperCase();
 }
 
-/** Gate admin-only endpoints behind the shared key. */
+/**
+ * Gate admin-only endpoints behind the shared key. Header only (R-6): the key
+ * is never accepted in the query string, so it can't leak via access logs,
+ * browser history, or Referer headers.
+ */
 function requireAdmin(req, res, next) {
-  const key = req.get('x-admin-key') || req.query.key;
+  const key = req.get('x-admin-key');
   if (!key || key !== ADMIN_KEY) {
     return res.status(401).json({ error: 'Unauthorized — invalid admin key.' });
   }
@@ -173,9 +177,9 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-/** Gate the redeemer endpoint behind either the admin key or the volunteer key. */
+/** Gate the redeemer endpoint behind either the admin key or the volunteer key (headers only). */
 function requireRedeemAccess(req, res, next) {
-  const adminKey = req.get('x-admin-key') || req.query.key;
+  const adminKey = req.get('x-admin-key');
   if (adminKey && adminKey === ADMIN_KEY) { req.role = 'admin'; return next(); }
   const volunteerKey = req.get('x-volunteer-key');
   if (volunteerKey && volunteerKey === VOLUNTEER_KEY) { req.role = 'volunteer'; return next(); }

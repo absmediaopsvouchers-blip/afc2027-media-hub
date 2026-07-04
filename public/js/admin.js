@@ -191,16 +191,25 @@ async function renderOverview() {
   startPolling();
 }
 
-function exportCsv() {
-  // GET download with the admin key in the query string (requireAdmin accepts it).
-  const url = '/api/admin/export.csv?key=' + encodeURIComponent(Admin.key());
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = '';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+async function exportCsv() {
+  // Fetch with the admin key in a header (R-6 — never in the URL), then save the
+  // returned CSV as a Blob download.
   toast('Exporting voucher log…', 'success');
+  try {
+    const res = await fetch('/api/admin/export.csv', { headers: { 'x-admin-key': Admin.key() } });
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `voucher-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    toast(e.message || 'Export failed', 'error');
+  }
 }
 
 async function refreshOverview() {
