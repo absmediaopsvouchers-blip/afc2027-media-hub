@@ -348,7 +348,7 @@ async function checkUser(email) {
     const r = await API.get('/user/' + encodeURIComponent(email));
     // Ignore if the user has since changed the email field.
     if (document.getElementById('v-email') && document.getElementById('v-email').value.trim().toLowerCase() !== email) return;
-    if (r.known) { rememberEmail(email); showKnown(r.accreditationNumber); }
+    if (r.known) { rememberEmail(email); showKnown(); }
     else showUnknown();
   } catch (e) { /* offline check is best-effort */ }
 }
@@ -357,15 +357,15 @@ function rememberEmail(email) {
   try { localStorage.setItem(EMAIL_KEY, email); } catch (e) { /* storage may be blocked */ }
 }
 
-function showKnown(acc) {
+function showKnown() {
   state.form.known = true;
-  state.form.acc = acc || '';
+  state.form.acc = '';
   const row = document.getElementById('v-acc-row');
   const known = document.getElementById('v-known');
   if (row) row.classList.add('hidden');
   if (known) {
     known.classList.remove('hidden');
-    known.innerHTML = `<div class="note">${ICONS.check}<span>Welcome back — linked to accreditation <strong>${esc(acc)}</strong>.</span></div>`;
+    known.innerHTML = `<div class="note">${ICONS.check}<span>Welcome back — your accreditation is already on file.</span></div>`;
   }
 }
 

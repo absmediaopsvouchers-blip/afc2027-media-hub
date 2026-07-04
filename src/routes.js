@@ -15,7 +15,7 @@
  *     GET    /api/press-conferences          schedule
  *     GET    /api/transport                  shuttle info
  *
- *   ADMIN  (require x-admin-key header or ?key=) — full access
+ *   ADMIN  (require x-admin-key header) — full access
  *     POST   /api/admin/login               validate a key, returns its role
  *     GET    /api/analytics                 dashboard metrics + live feed
  *     POST   /api/admin/redeem              catering: validate & redeem a voucher
@@ -34,6 +34,7 @@
 
 const express = require('express');
 const os = require('os');
+const rateLimit = require('express-rate-limit');
 const QRCode = require('qrcode');
 const store = require('./store');
 const { allowedMeals, checkEligibility, STATUS, LOCATION_TYPES } = require('./rules');
@@ -41,11 +42,33 @@ const { eventTimezone, todayInTz } = require('./time');
 
 const router = express.Router();
 
-// Shared secret for the admin dashboard. Override in production via env var.
-const ADMIN_KEY = process.env.ADMIN_KEY || 'afc2027-media';
+// Shared secrets, required from the environment — no defaults (R-2). server.js
+// refuses to boot if these are unset, so they are guaranteed non-empty here.
+const ADMIN_KEY = process.env.ADMIN_KEY;
 
-// Shared secret for volunteers — scoped to voucher redemption only.
-const VOLUNTEER_KEY = process.env.VOLUNTEER_KEY || 'afc2027-volunteer';
+// Scoped secret for volunteers — voucher redemption only.
+const VOLUNTEER_KEY = process.env.VOLUNTEER_KEY;
+
+// ---- rate limiting (R-4) ----------------------------------------------------
+// Brute-forcing the admin/volunteer key happens at the login endpoint, so that
+// gets the strictest limit. Public voucher creation gets a looser cap to stop
+// spam. Redemption is already key-gated and used rapidly by catering staff, so
+// its limit is generous — high enough never to hinder a real scanning line.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many attempts. Please wait a few minutes and try again.' },
+});
+const voucherLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down and try again shortly.' },
+});
+const redeemLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 100,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down.' },
+});
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -144,22 +167,26 @@ function normalizeVoucherId(raw) {
   return s.toUpperCase();
 }
 
-/** Gate admin-only endpoints behind the shared key. */
+/**
+ * Gate admin-only endpoints behind the shared key. Header only (R-6): the key
+ * is never accepted in the query string, so it can't leak via access logs,
+ * browser history, or Referer headers.
+ */
 function requireAdmin(req, res, next) {
-  const key = req.get('x-admin-key') || req.query.key;
-  if (key !== ADMIN_KEY) {
+  const key = req.get('x-admin-key');
+  if (!key || key !== ADMIN_KEY) {
     return res.status(401).json({ error: 'Unauthorized — invalid admin key.' });
   }
   req.role = 'admin';
   next();
 }
 
-/** Gate the redeemer endpoint behind either the admin key or the volunteer key. */
+/** Gate the redeemer endpoint behind either the admin key or the volunteer key (headers only). */
 function requireRedeemAccess(req, res, next) {
-  const adminKey = req.get('x-admin-key') || req.query.key;
-  if (adminKey === ADMIN_KEY) { req.role = 'admin'; return next(); }
+  const adminKey = req.get('x-admin-key');
+  if (adminKey && adminKey === ADMIN_KEY) { req.role = 'admin'; return next(); }
   const volunteerKey = req.get('x-volunteer-key');
-  if (volunteerKey === VOLUNTEER_KEY) { req.role = 'volunteer'; return next(); }
+  if (volunteerKey && volunteerKey === VOLUNTEER_KEY) { req.role = 'volunteer'; return next(); }
   return res.status(401).json({ error: 'Unauthorized — invalid key.' });
 }
 
@@ -252,17 +279,19 @@ router.get('/locations', wrap(async (req, res) => {
   res.json(locations.map((l) => ({ ...l, allowedMeals: allowedMeals(l.type) })));
 }));
 
-// Lets the client hide the accreditation field for returning users.
+// Lets the client hide the accreditation field for returning users. Returns
+// only whether the email is on file — never the accreditation number itself
+// (R-3): this endpoint is public and email-addressable, so echoing PII would
+// let anyone harvest accreditation numbers by guessing emails.
 router.get('/user/:email', wrap(async (req, res) => {
   const email = String(req.params.email || '').trim().toLowerCase();
   const user = await store.getUserByEmail(email);
-  if (!user) return res.json({ known: false });
-  res.json({ known: true, accreditationNumber: user.accreditationNumber });
+  res.json({ known: !!user });
 }));
 
 // Issue a voucher — the heart of the system. Every rule is enforced here,
 // server-side, so the browser cannot talk its way around the daily limits.
-router.post('/vouchers', wrap(async (req, res) => {
+router.post('/vouchers', voucherLimiter, wrap(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const accreditationNumber = String(req.body.accreditationNumber || '').trim();
   const locationId = String(req.body.locationId || '').trim();
@@ -460,7 +489,7 @@ function shareBaseUrl(req) {
 //  ADMIN
 // =============================================================================
 
-router.post('/admin/login', (req, res) => {
+router.post('/admin/login', loginLimiter, (req, res) => {
   const key = String(req.body.key || '');
   if (key === ADMIN_KEY) return res.json({ ok: true, role: 'admin' });
   if (key === VOLUNTEER_KEY) return res.json({ ok: true, role: 'volunteer' });
@@ -574,7 +603,7 @@ router.delete('/admin/tabs/:id', requireAdmin, wrap(async (req, res) => {
 
 // ---- Catering Staff Voucher Redeemer ----------------------------------------
 
-router.post('/admin/redeem', requireRedeemAccess, wrap(async (req, res) => {
+router.post('/admin/redeem', redeemLimiter, requireRedeemAccess, wrap(async (req, res) => {
   const id = normalizeVoucherId(req.body.voucherId || req.body.id);
   if (!id) return res.status(400).json({ code: 'INVALID', error: 'Please scan or enter a voucher ID.' });
 

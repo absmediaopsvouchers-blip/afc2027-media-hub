@@ -15,11 +15,13 @@
   },
   "dependencies": {
     "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
     "qrcode": "^1.5.3"
   },
   "optionalDependencies": {
-    "pg": "^8.11.5",
-    "mongoose": "^8.4.0"
+    "mongoose": "^8.4.0",
+    "pg": "^8.11.5"
   },
   "license": "MIT"
 }
