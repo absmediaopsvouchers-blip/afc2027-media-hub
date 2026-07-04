@@ -27,11 +27,22 @@ const HOST = '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 async function main() {
+  // Refuse to boot without real keys (R-2). There are no built-in defaults, so
+  // an unset key would otherwise leave the API unguarded.
+  if (!ADMIN_KEY || !VOLUNTEER_KEY) {
+    console.error('\n[fatal] ADMIN_KEY and VOLUNTEER_KEY must be set as environment variables (no defaults).');
+    console.error('        Set them in your .env for local dev, or in the host dashboard for deploys.\n');
+    process.exit(1);
+  }
+
   // Connect / migrate / seed the chosen backend before serving any requests.
   await store.init();
 
   const app = express();
   app.disable('x-powered-by');
+  // Behind Render/Fly's proxy: trust one hop so express-rate-limit keys off the
+  // real client IP (X-Forwarded-For) rather than the proxy's.
+  app.set('trust proxy', 1);
 
   // CORS: the API is read directly from the browser by other AFC 2027 tools
   // on different origins (e.g. the Central Dashboard). No cookies/credentials
@@ -76,8 +87,9 @@ function printBanner(port) {
   console.log(line);
   console.log(`  Storage backend : ${store.backend}`);
   console.log(`  Event timezone  : ${eventTimezone()}  (today: ${todayInTz()})`);
-  console.log(`  Admin key       : "${ADMIN_KEY}"  (set ADMIN_KEY to change)`);
-  console.log(`  Volunteer key   : "${VOLUNTEER_KEY}"  (set VOLUNTEER_KEY to change) — redeem only`);
+  // Never print the actual keys (R-2/M-6) — logs may be captured by the host.
+  console.log(`  Admin key       : set ✓  (from ADMIN_KEY)`);
+  console.log(`  Volunteer key   : set ✓  (from VOLUNTEER_KEY) — redeem only`);
   console.log(line);
   console.log('  On this computer:');
   console.log(`     Client app   ->  http://localhost:${port}`);
