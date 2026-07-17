@@ -106,6 +106,22 @@ async function main() {
   app.get('/admin', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'admin.html')));
   app.get('/share', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'share.html')));
 
+  // Error handler (last). Keeps malformed input and unexpected failures from
+  // leaking stack traces to clients — body-parser JSON syntax errors and
+  // oversized bodies surface here as clean 4xx JSON; anything else is a 500.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const badJson = err.type === 'entity.parse.failed' || err instanceof SyntaxError;
+    const status = badJson ? 400 : (err.status || err.statusCode || 500);
+    if (status >= 500) console.error('[error]', err.message);
+    res.status(status).json({
+      error: badJson ? 'Invalid JSON in request body.'
+        : status < 500 ? (err.message || 'Request error.')
+          : 'Server error. Please try again.',
+    });
+  });
+
   // Hourly housekeeping: roll any still-Pending vouchers from past days to Expired.
   const sweep = setInterval(() => {
     store.expireStale(todayInTz()).catch((e) => console.error('[sweep]', e.message));
