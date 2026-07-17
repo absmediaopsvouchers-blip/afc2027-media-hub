@@ -7,7 +7,7 @@
        the daily voucher limits must be enforced server-side).
    ========================================================================== */
 
-const CACHE = 'media-hub-v12';
+const CACHE = 'media-hub-v13';
 
 const SHELL = [
   '/',
@@ -19,7 +19,6 @@ const SHELL = [
   '/js/app.js',
   '/js/admin.js',
   '/vendor/jsqr.js',
-  '/manifest.webmanifest',
   '/icons/icon.svg',
 ];
 
@@ -43,6 +42,24 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  // Manifest reflects admin-configured branding (name + logo) — always fetch
+  // fresh so the install prompt and home-screen icon stay current; fall back to
+  // the last cached copy when offline.
+  if (url.pathname === '/manifest.webmanifest') {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
 
   // Never cache API responses — always go to the network.
   if (url.pathname.startsWith('/api/')) {

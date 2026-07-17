@@ -124,6 +124,10 @@ function sanitizeTheme(body) {
   for (const k of ['headerTitle', 'headerSubtitle']) {
     if (body[k] !== undefined) t[k] = String(body[k]).slice(0, 80);
   }
+  // PWA identity (install prompt + home-screen icon label). appName is the full
+  // install name; appShortName is the short label shown under the icon.
+  if (body.appName !== undefined) t.appName = String(body.appName).slice(0, 60);
+  if (body.appShortName !== undefined) t.appShortName = String(body.appShortName).slice(0, 20);
   if (body.font !== undefined) t.font = THEME_FONTS.includes(String(body.font)) ? String(body.font) : 'IBM Plex Sans';
   for (const [k, max, label] of [['logo', 1.2 * 1024 * 1024, 'Logo'], ['background', 2.6 * 1024 * 1024, 'Background']]) {
     if (body[k] === undefined) continue;

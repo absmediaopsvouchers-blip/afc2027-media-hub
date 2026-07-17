@@ -1307,6 +1307,7 @@ async function doResetVouchers() {
 const DESIGN_DEFAULTS = {
   brandColor: '#12274a', accentColor: '#2f6bff', bgColor: '#eef1f5',
   font: 'IBM Plex Sans', headerTitle: '', headerSubtitle: '', logo: '', background: '',
+  appName: '', appShortName: '',
 };
 let designLogo = '';
 let designBg = '';
@@ -1336,6 +1337,10 @@ function renderDesignForm() {
     <div id="design-preview"></div>
     <div class="card card-pad">
       <div class="row2">
+        <div class="field"><label>App name <span class="hint">— install prompt &amp; app title</span></label><input class="input" id="d-appname" value="${esc(t.appName)}" placeholder="AFC 2027 Media Hub — Meal Vouchers"></div>
+        <div class="field"><label>Short name <span class="hint">— label under the home-screen icon</span></label><input class="input" id="d-appshort" value="${esc(t.appShortName)}" placeholder="Media Hub"></div>
+      </div>
+      <div class="row2">
         <div class="field"><label>Header title</label><input class="input" id="d-title" value="${esc(t.headerTitle)}" placeholder="Media Hub"></div>
         <div class="field"><label>Header subtitle</label><input class="input" id="d-sub" value="${esc(t.headerSubtitle)}" placeholder="AFC Asian Cup 2027"></div>
       </div>
@@ -1348,7 +1353,7 @@ function renderDesignForm() {
         <div class="field"><label>Font</label><select class="select" id="d-font">${THEME_FONTS.map((f) => `<option ${f.name === t.font ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>
       </div>
       <div class="row2">
-        <div class="field"><label>Logo <span class="hint">— replaces the icon · max 1 MB</span></label>
+        <div class="field"><label>Logo <span class="hint">— app + install icon · max 1 MB</span></label>
           <div class="att-editor"><div class="att-list" id="d-logo-list"></div>
             <label class="btn btn-ghost btn-sm att-add">${ICONS.plus}<span>Upload logo</span><input type="file" id="d-logo-input" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden></label></div>
         </div>
@@ -1363,7 +1368,7 @@ function renderDesignForm() {
       </div>
     </div>`;
 
-  ['d-title', 'd-sub', 'd-font'].forEach((id) => document.getElementById(id).addEventListener('input', onDesignChange));
+  ['d-appname', 'd-appshort', 'd-title', 'd-sub', 'd-font'].forEach((id) => document.getElementById(id).addEventListener('input', onDesignChange));
   [['d-brand', 'd-brand-hex'], ['d-accent', 'd-accent-hex'], ['d-bg', 'd-bg-hex']].forEach(([p, h]) => {
     const pk = document.getElementById(p), hx = document.getElementById(h);
     pk.addEventListener('input', () => { hx.value = pk.value; onDesignChange(); });
@@ -1379,6 +1384,8 @@ function renderDesignForm() {
 
 function readDesignForm() {
   return {
+    appName: val('d-appname').trim(),
+    appShortName: val('d-appshort').trim(),
     headerTitle: val('d-title').trim(),
     headerSubtitle: val('d-sub').trim(),
     brandColor: val('d-brand-hex').trim() || val('d-brand'),

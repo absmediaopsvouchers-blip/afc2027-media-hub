@@ -101,7 +101,40 @@ async function main() {
   // API.
   app.use('/api', router);
 
-  // Static client + admin assets (also serves manifest.webmanifest, sw.js, icons).
+  // Dynamic web-app manifest — reflects the admin-configured app name and logo
+  // (Design tab) so the PWA install prompt and home-screen icon match the event
+  // branding. Defined before express.static so it overrides the static
+  // manifest.webmanifest, which stays as an offline/no-settings fallback.
+  app.get('/manifest.webmanifest', async (req, res) => {
+    let s = {};
+    let meta = {};
+    try { [s, meta] = await Promise.all([store.getSettings(), store.getMeta()]); } catch (e) { /* use defaults */ }
+    const hex = (v, fallback) => (/^#[0-9a-fA-F]{6}$/.test(v || '') ? v : fallback);
+    const name = String(s.appName || s.headerTitle || (meta && meta.event) || 'AFC 2027 Media Hub — Meal Vouchers').slice(0, 60);
+    const shortName = String(s.appShortName || s.headerTitle || 'Media Hub').slice(0, 20);
+    const logoType = typeof s.logo === 'string' && s.logo.startsWith('data:')
+      ? (s.logo.slice(5, s.logo.indexOf(';')) || 'image/png') : null;
+    const icons = logoType
+      ? [{ src: s.logo, sizes: 'any', type: logoType, purpose: 'any' }]
+      : [{ src: '/icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }];
+    res.set('Cache-Control', 'no-cache');
+    res.type('application/manifest+json').send(JSON.stringify({
+      name,
+      short_name: shortName,
+      description: 'Digital meal vouchers and media information hub for AFC Asian Cup 2027.',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: hex(s.bgColor, '#12274a'),
+      theme_color: hex(s.brandColor, '#12274a'),
+      categories: ['sports', 'utilities', 'food'],
+      icons,
+    }));
+  });
+
+  // Static client + admin assets (also serves sw.js, icons, and the fallback
+  // manifest.webmanifest for offline use).
   app.use(express.static(PUBLIC_DIR));
   app.get('/admin', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'admin.html')));
   app.get('/share', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'share.html')));
