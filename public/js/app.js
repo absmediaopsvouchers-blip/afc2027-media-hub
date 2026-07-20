@@ -702,20 +702,28 @@ async function renderNews(title, sub) {
 
 function pushToggleHtml() {
   if (!(typeof PushMgr !== 'undefined' && PushMgr.supported())) return '';
-  return `<div class="card card-pad" id="push-toggle-card" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-    ${ICONS.info}<span style="flex:1">Get notified the moment new updates are posted.</span>
-    <button class="btn btn-sm" id="push-toggle-btn">…</button>
+  return `<div class="push-toggle" id="push-toggle-card">
+    <span class="push-toggle-icon">${ICONS.bell}</span>
+    <div class="push-toggle-text">
+      <div class="push-toggle-title">News updates</div>
+      <div class="push-toggle-sub">Get notified the moment new updates are posted.</div>
+    </div>
+    <button class="btn btn-sm push-toggle-btn" id="push-toggle-btn">…</button>
   </div>`;
 }
 
 async function wirePushToggle() {
   const btn = document.getElementById('push-toggle-btn');
+  const card = document.getElementById('push-toggle-card');
+  const iconWrap = card && card.querySelector('.push-toggle-icon');
   if (!btn) return;
   const refreshLabel = async () => {
     const subscribed = await PushMgr.isSubscribed().catch(() => false);
-    btn.textContent = subscribed ? 'Notifications on' : 'Enable notifications';
+    btn.textContent = subscribed ? 'Turn off' : 'Enable';
     btn.classList.toggle('btn-primary', !subscribed);
     btn.dataset.subscribed = subscribed ? '1' : '';
+    if (card) card.classList.toggle('push-on', subscribed);
+    if (iconWrap) iconWrap.innerHTML = subscribed ? ICONS.bell : ICONS.bellOff;
   };
   await refreshLabel();
   btn.addEventListener('click', async () => {
