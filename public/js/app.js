@@ -712,11 +712,19 @@ function pushToggleHtml() {
   </div>`;
 }
 
-async function wirePushToggle() {
+function wirePushToggle() {
   const btn = document.getElementById('push-toggle-btn');
   const card = document.getElementById('push-toggle-card');
   const iconWrap = card && card.querySelector('.push-toggle-icon');
   if (!btn) return;
+
+  // Set an interactive default synchronously — never leave the button stuck
+  // showing the "…" placeholder if the SW is slow to become ready.
+  btn.textContent = 'Enable';
+  btn.classList.add('btn-primary');
+  btn.dataset.subscribed = '';
+  if (iconWrap) iconWrap.innerHTML = ICONS.bell;
+
   const refreshLabel = async () => {
     const subscribed = await PushMgr.isSubscribed().catch(() => false);
     btn.textContent = subscribed ? 'Turn off' : 'Enable';
@@ -725,7 +733,9 @@ async function wirePushToggle() {
     if (card) card.classList.toggle('push-on', subscribed);
     if (iconWrap) iconWrap.innerHTML = subscribed ? ICONS.bell : ICONS.bellOff;
   };
-  await refreshLabel();
+
+  // Attach the click handler BEFORE awaiting — otherwise a slow SW ready state
+  // leaves the button unresponsive on first render.
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     try {
@@ -743,6 +753,9 @@ async function wirePushToggle() {
       await refreshLabel();
     }
   });
+
+  // Now resolve the true label in the background.
+  refreshLabel();
 }
 
 /* ---- news attachments (images / PDFs) ------------------------------------- */

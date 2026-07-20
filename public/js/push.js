@@ -10,10 +10,14 @@ const PushMgr = {
     return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   },
 
-  /** The active subscription for this browser, or null. */
+  /** The active subscription for this browser, or null. Returns null quickly
+   *  (rather than hanging) if the service worker hasn't finished registering
+   *  yet — the UI needs to stay responsive from the first render. */
   async current() {
     if (!this.supported()) return null;
-    const reg = await navigator.serviceWorker.ready;
+    const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 3000));
+    const reg = await Promise.race([navigator.serviceWorker.ready, timeout]);
+    if (!reg) return null;
     return reg.pushManager.getSubscription();
   },
 
@@ -31,7 +35,12 @@ const PushMgr = {
     if (permission !== 'granted') throw new Error('Notification permission was not granted.');
 
     const { publicKey } = await API.get('/push/vapid-public-key');
-    const reg = await navigator.serviceWorker.ready;
+    // Ensure the service worker is registered before subscribing — index.html
+    // registers it on window.load but the user may click before that fires.
+    let reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) reg = await navigator.serviceWorker.register('/sw.js');
+    // Wait for it to actually become active.
+    reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
     const sub = existing || await reg.pushManager.subscribe({
       userVisibleOnly: true,
