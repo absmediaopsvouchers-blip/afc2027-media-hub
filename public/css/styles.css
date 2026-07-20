@@ -482,8 +482,9 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
    News feed
    ========================================================================== */
 
-.news-item { padding: 18px; border-bottom: 1px solid var(--line-2); }
+.news-item { padding: 18px; border-bottom: 1px solid var(--line-2); transition: background-color .6s ease; }
 .news-item:last-child { border-bottom: 0; }
+.news-highlight { background-color: var(--accent-soft); }
 .news-top { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
 .news-title { font-size: 1.08rem; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
 .news-title svg { width: 16px; height: 16px; color: var(--warn); }

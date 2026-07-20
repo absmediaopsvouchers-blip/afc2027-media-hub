@@ -69,8 +69,13 @@ async function init() {
   const Settings = model('Settings', new Schema({ key: { type: String, unique: true }, data: { type: Object, default: {} } }, opts));
   const Tab = model('Tab', new Schema({ id: { type: String, unique: true }, title: String, route: String, content_type: String, content: String, order: Number, permissions: String }, opts));
   const Audit = model('Audit', new Schema({ id: { type: String, unique: true }, action: String, detail: String, actor: String, at: String }, opts));
+  const PushSubscription = model('PushSubscription', new Schema({
+    endpoint: { type: String, unique: true },
+    keys: { p256dh: String, auth: String },
+    createdAt: String,
+  }, opts));
 
-  models = { Meta, Location, User, Voucher, News, Press, Transport, Category, Settings, Tab, Audit };
+  models = { Meta, Location, User, Voucher, News, Press, Transport, Category, Settings, Tab, Audit, PushSubscription };
 
   // Ensure indexes (incl. the unique voucher constraint) are built.
   await Promise.all(Object.values(models).map((m) => m.init()));
@@ -338,6 +343,22 @@ async function saveSettings(obj) {
   return obj || {};
 }
 
+// ---- push subscriptions (Web Push) -------------------------------------------
+
+async function listPushSubscriptions() {
+  return (await models.PushSubscription.find().lean()).map(strip);
+}
+
+async function savePushSubscription(sub) {
+  await models.PushSubscription.updateOne({ endpoint: sub.endpoint }, { $set: sub }, { upsert: true });
+  return sub;
+}
+
+async function deletePushSubscription(endpoint) {
+  const r = await models.PushSubscription.deleteOne({ endpoint });
+  return r.deletedCount > 0;
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 function pick(obj, keys) {
@@ -391,4 +412,7 @@ module.exports = {
   deleteTab,
   addAudit,
   listAudit,
+  listPushSubscriptions,
+  savePushSubscription,
+  deletePushSubscription,
 };

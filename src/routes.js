@@ -14,6 +14,9 @@
  *     GET    /api/news                       news feed
  *     GET    /api/press-conferences          schedule
  *     GET    /api/transport                  shuttle info
+ *     GET    /api/push/vapid-public-key      Web Push public key (503 if unconfigured)
+ *     POST   /api/push/subscribe             register a browser for News push notifications
+ *     POST   /api/push/unsubscribe           remove a push subscription
  *
  *   ADMIN  (require x-admin-key header) — full access
  *     POST   /api/admin/login               validate a key, returns its role
@@ -21,7 +24,7 @@
  *     POST   /api/admin/redeem              catering: validate & redeem a voucher
  *     GET    /api/admin/export.csv          download full voucher log (CSV)
  *     POST·PUT·DELETE /api/locations[/:id]  venue manager
- *     POST·PUT·DELETE /api/news[/:id]       news manager
+ *     POST·PUT·DELETE /api/news[/:id]       news manager (POST also broadcasts a push notification)
  *     POST·PUT·DELETE /api/press-conferences[/:id]   press manager
  *     POST   /api/admin/reset-vouchers      wipe ALL voucher data (needs confirm:true)
  *     POST·PUT·DELETE /api/admin/tabs[/:id] client-app custom tab manager
@@ -37,6 +40,7 @@ const os = require('os');
 const rateLimit = require('express-rate-limit');
 const QRCode = require('qrcode');
 const store = require('./store');
+const push = require('./push');
 const { allowedMeals, checkEligibility, STATUS, LOCATION_TYPES } = require('./rules');
 const { eventTimezone, todayInTz } = require('./time');
 
@@ -69,6 +73,11 @@ const redeemLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Too many requests. Please slow down.' },
 });
+const pushLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 30,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down.' },
+});
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -81,6 +90,18 @@ const VENUE_PREFIX = { MMC: 'MMC', Stadium: 'STD', Training: 'TRN' };
 
 function isEmail(s) {
   return typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+/** Validate the browser-standard PushSubscription JSON shape. */
+function isPushSubscription(body) {
+  return !!(
+    body &&
+    typeof body.endpoint === 'string' &&
+    /^https:\/\//i.test(body.endpoint) &&
+    body.keys &&
+    typeof body.keys.p256dh === 'string' &&
+    typeof body.keys.auth === 'string'
+  );
 }
 
 // ---- news attachments (images / PDFs stored as base64 data URLs) ------------
@@ -465,6 +486,33 @@ router.get('/share', wrap(async (req, res) => {
   res.json({ url, qr });
 }));
 
+// ---- Web Push (VAPID) --------------------------------------------------------
+
+// The public key is not secret (it's embedded in every subscribe request the
+// browser makes) — safe to serve to anyone.
+router.get('/push/vapid-public-key', (req, res) => {
+  if (!push.configured) return res.status(503).json({ error: 'Push notifications are not configured.' });
+  res.json({ publicKey: push.publicKey });
+});
+
+router.post('/push/subscribe', pushLimiter, wrap(async (req, res) => {
+  if (!push.configured) return res.status(503).json({ error: 'Push notifications are not configured.' });
+  if (!isPushSubscription(req.body)) return res.status(400).json({ error: 'Invalid push subscription.' });
+  await store.savePushSubscription({
+    endpoint: req.body.endpoint,
+    keys: { p256dh: req.body.keys.p256dh, auth: req.body.keys.auth },
+    createdAt: new Date().toISOString(),
+  });
+  res.status(201).json({ ok: true });
+}));
+
+router.post('/push/unsubscribe', pushLimiter, wrap(async (req, res) => {
+  const endpoint = String(req.body.endpoint || '');
+  if (!endpoint) return res.status(400).json({ error: 'endpoint is required.' });
+  await store.deletePushSubscription(endpoint);
+  res.json({ ok: true });
+}));
+
 function firstLanIp() {
   const ifaces = os.networkInterfaces();
   for (const name of Object.keys(ifaces)) {
@@ -737,7 +785,11 @@ router.post('/news', requireAdmin, wrap(async (req, res) => {
     attachments: att.attachments,
   };
   await store.createNews(item);
-  res.status(201).json(item);
+  // Notify subscribed browsers. Best-effort — a broadcast failure never blocks
+  // the publish itself, so the admin's save always succeeds.
+  let pushResult = { sent: 0, failed: 0, total: 0 };
+  try { pushResult = await push.sendNewsPush(item); } catch (err) { console.error('[push] broadcast failed:', err.message); }
+  res.status(201).json({ ...item, push: pushResult });
 }));
 
 router.put('/news/:id', requireAdmin, wrap(async (req, res) => {

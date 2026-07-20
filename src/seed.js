@@ -60,6 +60,9 @@ function getSeedData() {
     // Admin action log (voucher resets, tab changes) shown in the analytics feed.
     auditLog: [],
 
+    // Web Push subscriptions (endpoint + keys) registered by client-app browsers.
+    pushSubscriptions: [],
+
     // Managed content categories (used by the News feed). Admin-editable so new
     // categories can be added without code changes. Each has a display colour.
     categories: [

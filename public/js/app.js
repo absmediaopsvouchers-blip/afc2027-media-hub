@@ -43,6 +43,7 @@ const state = {
   myVouchers: [], // this user's vouchers for today (server-backed + cached)
   myVouchersDate: null,
   news: [], // last-loaded news list (for attachment lookups)
+  newsDeepLinkId: null, // article id to scroll to/highlight, set from a #news?article=ID hash
   // Persisted across tab switches so a half-filled form survives navigation.
   form: { email: '', acc: '', known: null, locationId: '', meal: '' },
 };
@@ -50,6 +51,14 @@ const state = {
 const view = () => document.getElementById('view');
 
 function isEmailLike(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
+
+/** Split "#news?article=NW-2001" into { tabId: 'news', articleId: 'NW-2001' }. */
+function parseHash() {
+  const raw = location.hash.replace('#', '');
+  const [tabId, query] = raw.split('?');
+  const articleId = query ? new URLSearchParams(query).get('article') : null;
+  return { tabId, articleId };
+}
 
 /* ---- shell ---------------------------------------------------------------- */
 
@@ -64,9 +73,12 @@ function init() {
   buildNavs();
   startClock();
 
-  // Restore tab from URL hash (so a refresh keeps you in place).
-  const hash = location.hash.replace('#', '');
-  if (TABS.some((t) => t.id === hash)) state.tab = hash;
+  // Restore tab from URL hash (so a refresh keeps you in place). A hash like
+  // "#news?article=NW-2001" (from a tapped push notification) also selects
+  // which article to scroll to and highlight once the News tab renders.
+  const { tabId, articleId } = parseHash();
+  if (TABS.some((t) => t.id === tabId)) state.tab = tabId;
+  if (articleId) state.newsDeepLinkId = articleId;
 
   loadConfig().then(() => render());
 }
@@ -84,8 +96,8 @@ async function loadConfig() {
     // Rebuild navs now the custom tabs are known, and honour a hash pointing
     // at one of them (buildNavs ran before they were loaded).
     buildNavs();
-    const hash = location.hash.replace('#', '');
-    if (allTabs().some((t) => t.id === hash)) state.tab = hash;
+    const { tabId } = parseHash();
+    if (allTabs().some((t) => t.id === tabId)) state.tab = tabId;
     // Theme / branding (colours, font, logo, background, header text).
     await loadTheme();
     applyLogo(THEME.logo);
@@ -639,17 +651,18 @@ async function renderPress() {
 
 async function renderNews(title, sub) {
   const head = pageHead(title || 'News & Media Updates', sub || 'Live operational updates and official announcements.');
-  view().innerHTML = head + loadingHtml();
+  view().innerHTML = head + pushToggleHtml() + loadingHtml();
+  wirePushToggle();
   let list;
   try { list = await API.get('/news'); }
-  catch (e) { view().innerHTML = head + errorHtml(e.message); return; }
+  catch (e) { view().innerHTML = head + pushToggleHtml() + errorHtml(e.message); wirePushToggle(); return; }
 
-  if (!list.length) { view().innerHTML = head + emptyHtml('No updates posted yet.'); return; }
+  if (!list.length) { view().innerHTML = head + pushToggleHtml() + emptyHtml('No updates posted yet.'); wirePushToggle(); return; }
 
   state.news = list; // kept so attachment clicks can look up the data URL
-  let html = head + '<div class="card">';
+  let html = head + pushToggleHtml() + '<div class="card">';
   for (const n of list) {
-    html += `<div class="news-item">
+    html += `<div class="news-item" id="news-${esc(n.id)}">
       <div class="news-top">
         ${catBadge(n.category)}
         ${n.pinned ? `<span class="badge badge-amber">Pinned</span>` : ''}
@@ -662,6 +675,7 @@ async function renderNews(title, sub) {
   }
   html += '</div>';
   view().innerHTML = html;
+  wirePushToggle();
 
   view().querySelectorAll('[data-att]').forEach((b) => b.addEventListener('click', () => {
     const [nid, idxStr] = b.dataset.att.split(':');
@@ -671,6 +685,56 @@ async function renderNews(title, sub) {
     if (a.type && a.type.indexOf('image/') === 0) openLightbox(a.dataUrl, a.name);
     else openBlob(a.dataUrl);
   }));
+
+  // Jump to and highlight the article a push notification was tapped for.
+  if (state.newsDeepLinkId) {
+    const target = document.getElementById('news-' + state.newsDeepLinkId);
+    state.newsDeepLinkId = null;
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add('news-highlight');
+      setTimeout(() => target.classList.remove('news-highlight'), 2600);
+    }
+  }
+}
+
+/* ---- push notification opt-in toggle --------------------------------------- */
+
+function pushToggleHtml() {
+  if (!(typeof PushMgr !== 'undefined' && PushMgr.supported())) return '';
+  return `<div class="card card-pad" id="push-toggle-card" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    ${ICONS.info}<span style="flex:1">Get notified the moment new updates are posted.</span>
+    <button class="btn btn-sm" id="push-toggle-btn">…</button>
+  </div>`;
+}
+
+async function wirePushToggle() {
+  const btn = document.getElementById('push-toggle-btn');
+  if (!btn) return;
+  const refreshLabel = async () => {
+    const subscribed = await PushMgr.isSubscribed().catch(() => false);
+    btn.textContent = subscribed ? 'Notifications on' : 'Enable notifications';
+    btn.classList.toggle('btn-primary', !subscribed);
+    btn.dataset.subscribed = subscribed ? '1' : '';
+  };
+  await refreshLabel();
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      if (btn.dataset.subscribed) {
+        await PushMgr.unsubscribe();
+        toast('Notifications turned off.', 'success');
+      } else {
+        await PushMgr.subscribe();
+        toast('Notifications enabled — you’ll be alerted about new updates.', 'success');
+      }
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      await refreshLabel();
+    }
+  });
 }
 
 /* ---- news attachments (images / PDFs) ------------------------------------- */

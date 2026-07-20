@@ -778,10 +778,15 @@ async function saveNews(id) {
   };
   if (!payload.title) { toast('Please enter a title.', 'error'); return; }
   try {
+    let created = null;
     if (id) await API.put('/news/' + id, payload, true);
-    else await API.post('/news', payload, true);
+    else created = await API.post('/news', payload, true);
     document.getElementById('news-editor').innerHTML = '';
-    toast(id ? 'Update saved.' : 'Update published.', 'success');
+    if (created && created.push && created.push.total > 0) {
+      toast(`Update published — pushed to ${created.push.sent}/${created.push.total} device(s).`, 'success');
+    } else {
+      toast(id ? 'Update saved.' : 'Update published.', 'success');
+    }
     await loadNews();
   } catch (e) { handleAdminErr(e); }
 }

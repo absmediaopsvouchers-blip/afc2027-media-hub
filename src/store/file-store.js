@@ -356,6 +356,30 @@ async function saveSettings(obj) {
   return data.settings;
 }
 
+// ---- push subscriptions (Web Push) -------------------------------------------
+
+async function listPushSubscriptions() {
+  return (data.pushSubscriptions || []).slice();
+}
+
+/** Upsert by endpoint — a browser resubscribing (e.g. key rotation) replaces the old row. */
+async function savePushSubscription(sub) {
+  if (!data.pushSubscriptions) data.pushSubscriptions = [];
+  const existing = data.pushSubscriptions.find((s) => s.endpoint === sub.endpoint);
+  if (existing) Object.assign(existing, sub);
+  else data.pushSubscriptions.push(sub);
+  persist();
+  return sub;
+}
+
+async function deletePushSubscription(endpoint) {
+  const before = (data.pushSubscriptions || []).length;
+  data.pushSubscriptions = (data.pushSubscriptions || []).filter((s) => s.endpoint !== endpoint);
+  if (data.pushSubscriptions.length === before) return false;
+  persist();
+  return true;
+}
+
 module.exports = {
   backend,
   init,
@@ -401,4 +425,7 @@ module.exports = {
   deleteTab,
   addAudit,
   listAudit,
+  listPushSubscriptions,
+  savePushSubscription,
+  deletePushSubscription,
 };

@@ -7,7 +7,7 @@
        the daily voucher limits must be enforced server-side).
    ========================================================================== */
 
-const CACHE = 'media-hub-v13';
+const CACHE = 'media-hub-v14';
 
 const SHELL = [
   '/',
@@ -16,6 +16,7 @@ const SHELL = [
   '/css/styles.css',
   '/css/admin.css',
   '/js/common.js',
+  '/js/push.js',
   '/js/app.js',
   '/js/admin.js',
   '/vendor/jsqr.js',
@@ -83,6 +84,44 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => cached);
       return cached || network;
+    })
+  );
+});
+
+/* ---- Web Push: News notifications ------------------------------------------
+   Payload shape (set by src/push.js on the server):
+     { title, body, icon, badge, data: { article_id, category, deep_link_url } }
+   ========================================================================== */
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch (e) { /* non-JSON push — ignore */ }
+
+  const title = payload.title || 'Media Hub update';
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon || '/icons/notification-icon-256.png',
+    badge: payload.badge || '/icons/notification-badge-96.png',
+    data: payload.data || {},
+    tag: (payload.data && payload.data.article_id) || undefined,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.deep_link_url) || '/#news';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
+      for (const client of clientsArr) {
+        if ('focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
     })
   );
 });

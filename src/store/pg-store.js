@@ -147,6 +147,12 @@ async function migrate() {
       actor  TEXT,
       at     TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint    TEXT PRIMARY KEY,
+      p256dh      TEXT NOT NULL,
+      auth        TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 }
 
@@ -603,6 +609,31 @@ async function saveSettings(obj) {
   return obj || {};
 }
 
+// ---- push subscriptions (Web Push) -------------------------------------------
+
+function toPushSub(r) {
+  return { endpoint: r.endpoint, keys: { p256dh: r.p256dh, auth: r.auth }, createdAt: iso(r.created_at) };
+}
+
+async function listPushSubscriptions() {
+  const { rows } = await q('SELECT * FROM push_subscriptions');
+  return rows.map(toPushSub);
+}
+
+async function savePushSubscription(sub) {
+  await q(
+    `INSERT INTO push_subscriptions (endpoint, p256dh, auth) VALUES ($1,$2,$3)
+     ON CONFLICT (endpoint) DO UPDATE SET p256dh = $2, auth = $3`,
+    [sub.endpoint, sub.keys.p256dh, sub.keys.auth]
+  );
+  return sub;
+}
+
+async function deletePushSubscription(endpoint) {
+  const { rowCount } = await q('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+  return rowCount > 0;
+}
+
 module.exports = {
   backend,
   init,
@@ -648,4 +679,7 @@ module.exports = {
   deleteTab,
   addAudit,
   listAudit,
+  listPushSubscriptions,
+  savePushSubscription,
+  deletePushSubscription,
 };
