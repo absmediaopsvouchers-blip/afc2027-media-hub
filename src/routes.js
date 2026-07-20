@@ -513,6 +513,18 @@ router.post('/push/unsubscribe', pushLimiter, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Admin diagnostic: how many subscribers exist, and can we deliver to them?
+router.get('/admin/push/status', requireAdmin, wrap(async (req, res) => {
+  const subs = await store.listPushSubscriptions();
+  res.json({ configured: push.configured, subscriberCount: subs.length });
+}));
+
+router.post('/admin/push/test', requireAdmin, wrap(async (req, res) => {
+  if (!push.configured) return res.status(503).json({ error: 'Push notifications are not configured.' });
+  const result = await push.sendTestPush();
+  res.json({ ok: true, ...result });
+}));
+
 function firstLanIp() {
   const ifaces = os.networkInterfaces();
   for (const name of Object.keys(ifaces)) {

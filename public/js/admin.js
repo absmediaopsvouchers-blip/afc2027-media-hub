@@ -649,12 +649,47 @@ async function renderNewsMgr() {
   panel.innerHTML = `
     <div class="admin-head">
       <h2>News manager</h2>
-      <button class="btn btn-primary btn-sm" id="news-add">${ICONS.plus}<span>Add update</span></button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" id="news-push-test" title="Send a test push notification to every subscribed browser">
+          ${ICONS.bell || ICONS.info}<span id="news-push-test-label">Send test push</span>
+        </button>
+        <button class="btn btn-primary btn-sm" id="news-add">${ICONS.plus}<span>Add update</span></button>
+      </div>
     </div>
     <div id="news-editor"></div>
     <div class="card" id="news-list">${loadingHtml()}</div>`;
   document.getElementById('news-add').addEventListener('click', () => openNewsEditor(null));
+  document.getElementById('news-push-test').addEventListener('click', sendTestPush);
+  refreshPushStatus();
   await loadNews();
+}
+
+async function refreshPushStatus() {
+  const label = document.getElementById('news-push-test-label');
+  const btn = document.getElementById('news-push-test');
+  if (!label || !btn) return;
+  try {
+    const s = await API.get('/admin/push/status', true);
+    if (!s.configured) {
+      label.textContent = 'Push not configured';
+      btn.disabled = true;
+      return;
+    }
+    label.textContent = s.subscriberCount === 0
+      ? 'No subscribers yet'
+      : `Send test push (${s.subscriberCount})`;
+    btn.disabled = s.subscriberCount === 0;
+  } catch (e) { /* leave default label */ }
+}
+
+async function sendTestPush() {
+  const btn = document.getElementById('news-push-test');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await API.post('/admin/push/test', {}, true);
+    toast(`Test push: delivered to ${r.sent}/${r.total} device(s)${r.failed ? `, ${r.failed} failed` : ''}.`, r.sent > 0 ? 'success' : 'error');
+  } catch (e) { handleAdminErr(e); }
+  finally { refreshPushStatus(); }
 }
 
 async function loadNews() {

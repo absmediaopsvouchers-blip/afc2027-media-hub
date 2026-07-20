@@ -84,4 +84,15 @@ async function sendNewsPush(item) {
   return { sent, failed, total: subs.length };
 }
 
-module.exports = { configured, publicKey: VAPID_PUBLIC_KEY, sendNewsPush };
+/** Admin-triggered diagnostic push — same delivery path as a real news post,
+ *  so if it arrives the pipeline is healthy end-to-end. */
+async function sendTestPush() {
+  return sendNewsPush({
+    id: 'TEST',
+    title: 'Test notification',
+    body: 'If you can see this, push notifications are working correctly.',
+    category: 'Test',
+  });
+}
+
+module.exports = { configured, publicKey: VAPID_PUBLIC_KEY, sendNewsPush, sendTestPush };
