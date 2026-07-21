@@ -133,6 +133,11 @@ const THEME_FONTS = ['IBM Plex Sans', 'Inter', 'Poppins', 'Montserrat', 'Roboto'
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const IMG_DATA_RE = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,([A-Za-z0-9+/=]+)$/;
 
+// Client-app built-in tab ids (the four hardcoded tabs). Kept in sync with the
+// TABS list in public/js/app.js — admins can rename / reorder / hide these but
+// not add new ones here (custom tabs go through /api/admin/tabs).
+const BUILT_IN_TAB_IDS = ['voucher', 'press', 'news', 'transport'];
+
 /** Validate/normalise submitted theme fields (only those present are touched). */
 function sanitizeTheme(body) {
   const t = {};
@@ -158,6 +163,29 @@ function sanitizeTheme(body) {
     if (!m) return { ok: false, error: `${label} must be an image (PNG/JPG/GIF/WebP/SVG).` };
     if (Math.floor((m[2].length * 3) / 4) > max) return { ok: false, error: `${label} image is too large.` };
     t[k] = v;
+  }
+  // Per-tab overrides for the client app's built-in tabs — label, order, hidden.
+  // Unknown ids and unknown fields are silently dropped so the client can trust
+  // the shape without extra defensive code.
+  if (body.builtInTabs !== undefined) {
+    if (body.builtInTabs === null || typeof body.builtInTabs !== 'object' || Array.isArray(body.builtInTabs)) {
+      return { ok: false, error: 'builtInTabs must be an object keyed by tab id.' };
+    }
+    const out = {};
+    for (const id of BUILT_IN_TAB_IDS) {
+      const raw = body.builtInTabs[id];
+      if (!raw || typeof raw !== 'object') continue;
+      const entry = {};
+      if (raw.label !== undefined) entry.label = String(raw.label).slice(0, 30);
+      if (raw.order !== undefined) {
+        const n = Number(raw.order);
+        if (!Number.isFinite(n)) return { ok: false, error: `Invalid order for tab "${id}".` };
+        entry.order = Math.round(n);
+      }
+      if (raw.hidden !== undefined) entry.hidden = !!raw.hidden;
+      if (Object.keys(entry).length) out[id] = entry;
+    }
+    t.builtInTabs = out;
   }
   return { ok: true, theme: t };
 }

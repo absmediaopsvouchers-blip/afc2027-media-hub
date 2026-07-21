@@ -6,6 +6,10 @@
      3. News & Media Updates   4. Transport & Shuttle Info
    ========================================================================== */
 
+// Built-in client-app tabs. Admins can rename, reorder, or hide any of these
+// via Design Studio → App Tabs; the overrides live in THEME.builtInTabs and
+// are merged into the render below. Icons and route ids stay fixed so the
+// hash-driven navigation keeps working across renames.
 const TABS = [
   { id: 'voucher', label: 'Voucher', icon: 'ticket' },
   { id: 'press', label: 'Press', icon: 'mic' },
@@ -18,13 +22,31 @@ const CUSTOM_TAB_ICON = { 'static': 'file', 'feed': 'news', 'external-link': 'ar
 
 function customTabId(t) { return 'ct-' + t.id; }
 
+// Merge built-in tabs with THEME.builtInTabs overrides + admin custom tabs.
+// Sort order: built-ins default to their declaration index; overrides may set
+// a numeric `order`; custom tabs use their own `order` field (falling back to
+// after the built-ins).
 function allTabs() {
-  return TABS.concat((state.customTabs || []).map((t) => ({
+  const overrides = (typeof THEME === 'object' && THEME && THEME.builtInTabs) || {};
+  const built = TABS
+    .map((t, i) => {
+      const o = overrides[t.id] || {};
+      return {
+        ...t,
+        label: (typeof o.label === 'string' && o.label.trim()) ? o.label.trim() : t.label,
+        order: Number.isFinite(o.order) ? o.order : i + 1,
+        hidden: !!o.hidden,
+      };
+    })
+    .filter((t) => !t.hidden);
+  const custom = (state.customTabs || []).map((t, i) => ({
     id: customTabId(t),
     label: t.title,
     icon: CUSTOM_TAB_ICON[t.content_type] || 'file',
     custom: t,
-  })));
+    order: Number.isFinite(t.order) ? t.order : 100 + i,
+  }));
+  return [...built, ...custom].sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 // Returning users only enter their email — we cache it locally so the form is
@@ -92,13 +114,12 @@ async function loadConfig() {
     state.meta = meta;
     state.locations = locations || [];
     state.customTabs = customTabs || [];
-    // Rebuild navs now the custom tabs are known, and honour a hash pointing
-    // at one of them (buildNavs ran before they were loaded).
+    // Theme first — allTabs() reads THEME.builtInTabs, so navs must be built
+    // after the theme is loaded, otherwise renames and reorders would flash.
+    await loadTheme();
     buildNavs();
     const { tabId } = parseHash();
     if (allTabs().some((t) => t.id === tabId)) state.tab = tabId;
-    // Theme / branding (colours, font, logo, background, header text).
-    await loadTheme();
     applyLogo(THEME.logo);
     const titleEl = document.querySelector('.brand-title');
     if (titleEl && THEME.headerTitle) titleEl.textContent = THEME.headerTitle;
@@ -134,8 +155,32 @@ function buildNavs() {
       const b = e.target.closest('button[data-tab]');
       if (b) go(b.dataset.tab);
     });
+    nav.addEventListener('scroll', () => updateNavScrollIndicator(nav), { passive: true });
+    // ResizeObserver fires when the nav's own box or any child's box changes,
+    // so the "more content" indicator stays in sync with layout regardless of
+    // whether rAF happens to be scheduled. Handles innerHTML rebuilds, window
+    // resizes, orientation changes, and font loading all in one hook.
+    if (typeof ResizeObserver !== 'undefined' && !nav._sizeObserver) {
+      const ro = new ResizeObserver(() => updateNavScrollIndicator(nav));
+      ro.observe(nav);
+      nav._sizeObserver = ro;
+    }
   });
   updateNavActive();
+  // Immediate pass so the indicator is right on the first paint even before
+  // the ResizeObserver's async callback fires.
+  updateNavScrollIndicator(top);
+  updateNavScrollIndicator(bottom);
+}
+
+/** Show/hide the right-edge fade + chevron on a horizontally scrollable nav. */
+function updateNavScrollIndicator(nav) {
+  if (!nav) return;
+  // Only meaningful when the nav is actually rendered (some breakpoints hide it).
+  if (getComputedStyle(nav).display === 'none') { nav.classList.remove('has-more'); return; }
+  const overflowing = nav.scrollWidth - nav.clientWidth > 4;
+  const atEnd = nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 4;
+  nav.classList.toggle('has-more', overflowing && !atEnd);
 }
 
 function go(tab) {

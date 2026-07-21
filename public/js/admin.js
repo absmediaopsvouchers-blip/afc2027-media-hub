@@ -1160,6 +1160,15 @@ const TAB_PERMS = [
 ];
 const TAB_TYPE_LABEL = { 'static': 'Static', 'feed': 'Feed', 'external-link': 'Link' };
 
+// Built-in client-app tabs — must mirror the TABS list in public/js/app.js.
+// Admins can rename, reorder or hide these, but not delete them.
+const BUILT_IN_TABS = [
+  { id: 'voucher', defaultLabel: 'Voucher' },
+  { id: 'press', defaultLabel: 'Press' },
+  { id: 'news', defaultLabel: 'News' },
+  { id: 'transport', defaultLabel: 'Transport' },
+];
+
 async function renderAppTabsMgr() {
   const panel = document.getElementById('panel');
   panel.innerHTML = `
@@ -1167,11 +1176,90 @@ async function renderAppTabsMgr() {
       <h2>Client app tabs</h2>
       <button class="btn btn-primary btn-sm" id="tab-add">${ICONS.plus}<span>Add tab</span></button>
     </div>
-    <p class="mgr-note">${ICONS.info}<span>Custom tabs appear in the Media Client app alongside Voucher / Press / News / Transport. Use <strong>Order</strong> to position them, and <strong>Visible to</strong> to hide a tab from the public app. Changes are logged in the Overview activity feed.</span></p>
+    <p class="mgr-note">${ICONS.info}<span>Rename or reorder the built-in tabs below, or add your own custom tabs. Lower <strong>Order</strong> values appear first; use the hide toggle to remove a built-in tab from the client without deleting it. Changes are logged in the Overview activity feed.</span></p>
+
+    <div class="card card-pad" id="builtin-tabs-section" style="margin-bottom:14px">
+      <h3 style="margin:0 0 10px;font-size:.98rem">Built-in tabs</h3>
+      <div id="builtin-tabs-list">${loadingHtml()}</div>
+      <div class="editor-actions" style="margin-top:12px">
+        <button class="btn btn-ghost btn-sm" id="builtin-reset">Reset all</button>
+        <button class="btn btn-primary btn-sm" id="builtin-save">${ICONS.check}<span>Save built-in tab changes</span></button>
+      </div>
+    </div>
+
     <div id="tab-editor"></div>
     <div class="card" id="tab-list">${loadingHtml()}</div>`;
   document.getElementById('tab-add').addEventListener('click', () => openTabEditor(null));
-  await loadAppTabs();
+  document.getElementById('builtin-save').addEventListener('click', saveBuiltInTabs);
+  document.getElementById('builtin-reset').addEventListener('click', resetBuiltInTabs);
+  await Promise.all([loadBuiltInTabs(), loadAppTabs()]);
+}
+
+async function loadBuiltInTabs() {
+  try {
+    const theme = await API.get('/theme');
+    adminState.builtInTabs = (theme && theme.builtInTabs) || {};
+  } catch (e) {
+    adminState.builtInTabs = {};
+  }
+  renderBuiltInTabsList();
+}
+
+function renderBuiltInTabsList() {
+  const el = document.getElementById('builtin-tabs-list');
+  if (!el) return;
+  const overrides = adminState.builtInTabs || {};
+  el.innerHTML = BUILT_IN_TABS.map((t, i) => {
+    const o = overrides[t.id] || {};
+    const label = typeof o.label === 'string' && o.label ? o.label : t.defaultLabel;
+    const order = Number.isFinite(o.order) ? o.order : i + 1;
+    const hidden = !!o.hidden;
+    return `<div class="mgr-item" data-builtin="${esc(t.id)}">
+      <div class="mgr-main" style="display:grid;grid-template-columns:1fr 90px auto;gap:8px;align-items:center">
+        <input class="input" data-field="label" value="${esc(label)}" placeholder="${esc(t.defaultLabel)}" maxlength="30" aria-label="Label for ${esc(t.id)}">
+        <input class="input" data-field="order" type="number" value="${esc(order)}" step="1" aria-label="Order for ${esc(t.id)}">
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--muted);white-space:nowrap">
+          <input type="checkbox" data-field="hidden" ${hidden ? 'checked' : ''}>
+          Hide
+        </label>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function saveBuiltInTabs() {
+  const payload = {};
+  document.querySelectorAll('#builtin-tabs-list [data-builtin]').forEach((row) => {
+    const id = row.dataset.builtin;
+    const def = BUILT_IN_TABS.find((t) => t.id === id);
+    const label = row.querySelector('[data-field="label"]').value.trim();
+    const order = Number(row.querySelector('[data-field="order"]').value);
+    const hidden = row.querySelector('[data-field="hidden"]').checked;
+    const entry = {};
+    if (label && label !== def.defaultLabel) entry.label = label;
+    if (Number.isFinite(order)) entry.order = order;
+    if (hidden) entry.hidden = true;
+    if (Object.keys(entry).length) payload[id] = entry;
+  });
+  const btn = document.getElementById('builtin-save');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await API.put('/theme', { builtInTabs: payload }, true);
+    adminState.builtInTabs = (r && r.builtInTabs) || {};
+    renderBuiltInTabsList();
+    toast('Built-in tabs updated.', 'success');
+  } catch (e) { handleAdminErr(e); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+async function resetBuiltInTabs() {
+  if (!confirm('Reset all built-in tabs to their default label and order?')) return;
+  try {
+    const r = await API.put('/theme', { builtInTabs: {} }, true);
+    adminState.builtInTabs = (r && r.builtInTabs) || {};
+    renderBuiltInTabsList();
+    toast('Built-in tabs reset.', 'success');
+  } catch (e) { handleAdminErr(e); }
 }
 
 async function loadAppTabs() {

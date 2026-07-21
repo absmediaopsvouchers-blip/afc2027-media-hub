@@ -152,6 +152,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
    longer custom tabs like "Tournament Info" would otherwise overflow the row
    and collide with the brand mark. */
 .topnav {
+  position: relative;         /* anchor for the .has-more fade indicator */
   display: flex; gap: 4px;
   min-width: 0;               /* allow shrinking below content width */
   overflow-x: auto;
@@ -172,6 +173,30 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 .topnav button:hover { color: #fff; background: rgba(255, 255, 255, .1); }
 .topnav button.active { color: #fff; background: rgba(255, 255, 255, .2); }
 
+/* Scroll indicator — a right-edge fade + subtle chevron that appears only
+   when there are more tabs off-screen to the right. The `.has-more` class is
+   toggled by JS on scroll / resize. Rendered as an ::after overlay so it can
+   sit above the scrolling content without being clipped by the container's
+   `overflow: hidden` state. */
+.topnav.has-more::after {
+  content: '';
+  position: sticky;           /* stays glued to the right edge of the scroll */
+  right: 0; top: 0; bottom: 0;
+  flex: none;
+  width: 44px;
+  margin-left: -44px;         /* pull the fade back over the last visible tab */
+  pointer-events: none;
+  background:
+    linear-gradient(to right, transparent, var(--brand-2) 70%),
+    /* Small chevron drawn in SVG so it inherits the app palette. */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.9' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'/%3E%3C/svg%3E") no-repeat right 6px center;
+  animation: nav-more-hint .9s ease-out;
+}
+@keyframes nav-more-hint {
+  from { opacity: 0; transform: translateX(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* =============================================================================
    Main content area
    ========================================================================== */
@@ -185,7 +210,11 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
   width: 100%;
   max-width: var(--maxw);
   margin-inline: auto;        /* centre the content column on wide screens */
-  padding: 22px 16px 36px;
+  /* Safe-area fallback: on tablets/desktop the bottomnav is display:none, so
+     the content column is the last child of the body. Without this, the last
+     card would sit under the home-indicator zone. On phones the bottomnav
+     already claims the safe area, so the extra padding here is a no-op. */
+  padding: 22px 16px calc(36px + env(safe-area-inset-bottom, 0px));
   animation: fadeIn .25s ease;
 }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -586,8 +615,15 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 .bottomnav {
   flex: none;               /* anchored at the bottom of the app-shell column */
   z-index: 50;
-  min-height: var(--bottomnav-h);
+  position: relative;       /* anchor for the .has-more scroll indicator */
+  /* Include the safe area explicitly so the visible content strip stays
+     the intended 66px tall regardless of the home-indicator zone (fixes an
+     iPhone 15 Pro Max quirk where the content column was being squeezed). */
+  min-height: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px));
   display: flex;
+  overflow-x: auto;                /* scroll when there are more tabs than fit */
+  scrollbar-width: none;           /* Firefox */
+  -webkit-overflow-scrolling: touch;
   background: rgba(255, 255, 255, .96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -598,8 +634,14 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
+.bottomnav::-webkit-scrollbar { display: none; }
 .bottomnav button {
-  flex: 1; border: 0; background: transparent; cursor: pointer;
+  /* Grow to share available space when few tabs (2–4), but never below 72px
+     so text stays legible. Once total width exceeds the container, the nav
+     itself scrolls horizontally. */
+  flex: 1 0 auto;
+  min-width: 72px;
+  border: 0; background: transparent; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   padding: 9px 0 8px;
   color: var(--muted); font-weight: 600; font-size: .74rem;
@@ -615,6 +657,25 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 .bottomnav button:active svg { background: var(--line-2); }
 .bottomnav button.active { color: var(--accent); }
 .bottomnav button.active svg { background: var(--accent-soft); }
+
+/* Right-edge fade + chevron indicator on the bottomnav, mirroring the topnav.
+   Bottom offset accounts for the safe-area padding so the fade stops above
+   the home indicator zone instead of visually merging with it. */
+.bottomnav.has-more::after {
+  content: '';
+  position: sticky;
+  right: 0;
+  top: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  flex: none;
+  width: 44px;
+  margin-left: -44px;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, transparent, rgba(255, 255, 255, .96) 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235c6a7e' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'/%3E%3C/svg%3E") no-repeat right 6px center;
+  animation: nav-more-hint .9s ease-out;
+}
 
 @media (min-width: 760px) {
   .bottomnav { display: none; }
