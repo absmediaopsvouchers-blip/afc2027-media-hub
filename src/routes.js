@@ -164,9 +164,9 @@ function sanitizeTheme(body) {
     if (Math.floor((m[2].length * 3) / 4) > max) return { ok: false, error: `${label} image is too large.` };
     t[k] = v;
   }
-  // Per-tab overrides for the client app's built-in tabs — label, order, hidden.
-  // Unknown ids and unknown fields are silently dropped so the client can trust
-  // the shape without extra defensive code.
+  // Per-tab overrides for the client app's built-in tabs — label, order,
+  // hidden, iconName. Unknown ids and unknown fields are silently dropped so
+  // the client can trust the shape without extra defensive code.
   if (body.builtInTabs !== undefined) {
     if (body.builtInTabs === null || typeof body.builtInTabs !== 'object' || Array.isArray(body.builtInTabs)) {
       return { ok: false, error: 'builtInTabs must be an object keyed by tab id.' };
@@ -183,9 +183,29 @@ function sanitizeTheme(body) {
         entry.order = Math.round(n);
       }
       if (raw.hidden !== undefined) entry.hidden = !!raw.hidden;
+      // Icon name must be a plain identifier — the client resolves it against
+      // the ICONS object and falls back to the default glyph on miss, so we
+      // just enforce a shape here without a strict allowlist (that would need
+      // to stay in sync across two files).
+      if (raw.iconName !== undefined) {
+        const iconName = String(raw.iconName).trim();
+        if (iconName && /^[a-zA-Z][a-zA-Z0-9]{0,30}$/.test(iconName)) entry.iconName = iconName;
+        else if (iconName === '') entry.iconName = '';
+      }
       if (Object.keys(entry).length) out[id] = entry;
     }
     t.builtInTabs = out;
+  }
+  // Default landing tab on app launch. Empty string = "no override, use News".
+  // The client resolves this at init time; unknown ids are treated as empty.
+  if (body.defaultTab !== undefined) {
+    const raw = String(body.defaultTab || '').trim();
+    // Accept built-in ids as-is, and custom-tab refs of the form "ct-<id>".
+    if (raw === '' || BUILT_IN_TAB_IDS.includes(raw) || /^ct-[A-Z0-9-]{1,40}$/i.test(raw)) {
+      t.defaultTab = raw;
+    } else {
+      return { ok: false, error: 'Invalid defaultTab value.' };
+    }
   }
   return { ok: true, theme: t };
 }
@@ -300,6 +320,13 @@ function sanitizeTab(body, partial) {
       return { ok: false, error: `permissions must be one of: ${TAB_PERMISSIONS.join(', ')}.` };
     }
     t.permissions = perm;
+  }
+  // Optional icon override — a name resolved by the client against its ICONS
+  // registry. Empty string is a valid "clear override" value.
+  if (body.iconName !== undefined) {
+    const iconName = String(body.iconName || '').trim();
+    if (iconName === '' || /^[a-zA-Z][a-zA-Z0-9]{0,30}$/.test(iconName)) t.iconName = iconName;
+    else return { ok: false, error: 'iconName must be a simple identifier.' };
   }
   return { ok: true, tab: t };
 }
@@ -661,7 +688,7 @@ router.post('/admin/reset-vouchers', requireAdmin, wrap(async (req, res) => {
 router.post('/admin/tabs', requireAdmin, wrap(async (req, res) => {
   const s = sanitizeTab(req.body || {}, false);
   if (!s.ok) return res.status(400).json({ error: s.error });
-  const tab = { id: uid('TAB'), content: '', order: 0, permissions: 'all', ...s.tab };
+  const tab = { id: uid('TAB'), content: '', order: 0, permissions: 'all', iconName: '', ...s.tab };
   const existing = await store.listTabs();
   if (existing.some((t) => t.route === tab.route)) {
     return res.status(409).json({ error: `A tab already uses the route ${tab.route}.` });

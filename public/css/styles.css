@@ -616,10 +616,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
   flex: none;               /* anchored at the bottom of the app-shell column */
   z-index: 50;
   position: relative;       /* anchor for the .has-more scroll indicator */
-  /* Include the safe area explicitly so the visible content strip stays
-     the intended 66px tall regardless of the home-indicator zone (fixes an
-     iPhone 15 Pro Max quirk where the content column was being squeezed). */
-  min-height: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px));
+  min-height: var(--bottomnav-h);
   display: flex;
   overflow-x: auto;                /* scroll when there are more tabs than fit */
   scrollbar-width: none;           /* Firefox */
@@ -629,10 +626,18 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--line);
   box-shadow: 0 -6px 26px rgba(16, 26, 46, .1);
-  /* Keep the nav above the home-indicator / gesture bar. */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+}
+/* Only reserve room for the home-indicator zone when the app is actually
+   installed as a PWA — inside Safari's browser mode the URL bar already
+   occupies that space, and adding safe-area padding there creates a visible
+   dead strip (the iPhone 15 Pro Max complaint). */
+@media (display-mode: standalone) {
+  .bottomnav {
+    min-height: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 .bottomnav::-webkit-scrollbar { display: none; }
 .bottomnav button {

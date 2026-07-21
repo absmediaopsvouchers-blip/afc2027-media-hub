@@ -240,3 +240,60 @@
 .rr-row span { color: var(--muted); }
 .rr-row strong { font-weight: 700; text-align: right; word-break: break-word; }
 .rr-foot { text-align: center; color: var(--ink-2); font-size: .86rem; font-weight: 600; margin-bottom: 16px; }
+
+/* ---- icon picker (used by App Tabs manager) ------------------------------- */
+
+.icon-picker { position: relative; display: inline-block; }
+.icon-picker-trigger {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background .15s, border-color .15s;
+  padding: 0;
+}
+.icon-picker-trigger:hover { background: #dbe6ff; border-color: var(--accent); }
+.icon-picker-trigger svg { width: 20px; height: 20px; }
+
+.icon-picker-menu {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  z-index: 100;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+  width: min(320px, calc(100vw - 40px));
+}
+.icon-picker-clear {
+  display: block; width: 100%;
+  padding: 8px 10px; margin-bottom: 8px;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px dashed var(--line); border-radius: var(--r-sm);
+  font-size: .82rem; font-weight: 600;
+  cursor: pointer;
+}
+.icon-picker-clear:hover { background: var(--line-2); color: var(--ink); }
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.icon-picker-option {
+  aspect-ratio: 1;
+  padding: 0;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.icon-picker-option:hover { background: var(--accent-soft); color: var(--accent); }
+.icon-picker-option.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.icon-picker-option svg { width: 18px; height: 18px; }

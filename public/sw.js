@@ -7,7 +7,7 @@
        the daily voucher limits must be enforced server-side).
    ========================================================================== */
 
-const CACHE = 'media-hub-v18';
+const CACHE = 'media-hub-v19';
 
 const SHELL = [
   '/',

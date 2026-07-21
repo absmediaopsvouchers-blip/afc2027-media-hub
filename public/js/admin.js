@@ -1176,11 +1176,15 @@ async function renderAppTabsMgr() {
       <h2>Client app tabs</h2>
       <button class="btn btn-primary btn-sm" id="tab-add">${ICONS.plus}<span>Add tab</span></button>
     </div>
-    <p class="mgr-note">${ICONS.info}<span>Rename or reorder the built-in tabs below, or add your own custom tabs. Lower <strong>Order</strong> values appear first; use the hide toggle to remove a built-in tab from the client without deleting it. Changes are logged in the Overview activity feed.</span></p>
+    <p class="mgr-note">${ICONS.info}<span>Rename, reorder, or restyle the built-in tabs below, and pick which tab the client app opens by default. Lower <strong>Order</strong> values appear first; hide a built-in tab without deleting it via the toggle. Changes are logged in the Overview activity feed.</span></p>
 
     <div class="card card-pad" id="builtin-tabs-section" style="margin-bottom:14px">
       <h3 style="margin:0 0 10px;font-size:.98rem">Built-in tabs</h3>
       <div id="builtin-tabs-list">${loadingHtml()}</div>
+      <div class="field" style="margin-top:14px;margin-bottom:0">
+        <label>Default landing tab <span class="hint">— what the client app opens on launch</span></label>
+        <select class="select" id="default-tab" style="max-width:360px"></select>
+      </div>
       <div class="editor-actions" style="margin-top:12px">
         <button class="btn btn-ghost btn-sm" id="builtin-reset">Reset all</button>
         <button class="btn btn-primary btn-sm" id="builtin-save">${ICONS.check}<span>Save built-in tab changes</span></button>
@@ -1195,15 +1199,69 @@ async function renderAppTabsMgr() {
   await Promise.all([loadBuiltInTabs(), loadAppTabs()]);
 }
 
+const DEFAULT_BUILT_IN_ICON = { voucher: 'ticket', press: 'mic', news: 'news', transport: 'bus' };
+
 async function loadBuiltInTabs() {
   try {
     const theme = await API.get('/theme');
     adminState.builtInTabs = (theme && theme.builtInTabs) || {};
+    adminState.defaultTab = (theme && theme.defaultTab) || '';
   } catch (e) {
     adminState.builtInTabs = {};
+    adminState.defaultTab = '';
   }
   renderBuiltInTabsList();
+  renderDefaultTabSelect();
 }
+
+/** Compact icon-picker cell: shows the currently selected glyph in a rounded
+ *  tile that opens a small popover of alternatives from TAB_ICON_GALLERY. */
+function iconPickerHtml(fieldName, currentIcon, fallbackIcon) {
+  const chosen = (currentIcon && ICONS[currentIcon]) ? currentIcon : fallbackIcon;
+  const glyph = ICONS[chosen] || ICONS.file;
+  return `<div class="icon-picker" data-field="${esc(fieldName)}" data-value="${esc(currentIcon || '')}">
+    <button type="button" class="icon-picker-trigger" title="Change icon">${glyph}</button>
+    <div class="icon-picker-menu" hidden>
+      ${(currentIcon ? `<button type="button" class="icon-picker-clear" data-icon="">Use default (${esc(fallbackIcon)})</button>` : '')}
+      <div class="icon-picker-grid">
+        ${(TAB_ICON_GALLERY || []).map((name) => `
+          <button type="button" class="icon-picker-option ${name === chosen ? 'active' : ''}" data-icon="${esc(name)}" title="${esc(name)}">${ICONS[name] || ICONS.file}</button>
+        `).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function wireIconPicker(root) {
+  root.querySelectorAll('.icon-picker').forEach((picker) => {
+    const trigger = picker.querySelector('.icon-picker-trigger');
+    const menu = picker.querySelector('.icon-picker-menu');
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Close any other open pickers first — only one open at a time.
+      document.querySelectorAll('.icon-picker-menu:not([hidden])').forEach((m) => { if (m !== menu) m.hidden = true; });
+      menu.hidden = !menu.hidden;
+    });
+    menu.querySelectorAll('button[data-icon]').forEach((opt) => {
+      opt.addEventListener('click', () => {
+        const iconName = opt.dataset.icon;
+        picker.dataset.value = iconName;
+        // Repaint the trigger with the newly selected glyph.
+        const fallback = picker.dataset.fallback || 'file';
+        const preview = (iconName && ICONS[iconName]) ? ICONS[iconName] : (ICONS[fallback] || ICONS.file);
+        trigger.innerHTML = preview;
+        menu.hidden = true;
+      });
+    });
+  });
+}
+
+// Global click closes any open picker menus when tapping outside.
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.icon-picker')) {
+    document.querySelectorAll('.icon-picker-menu:not([hidden])').forEach((m) => { m.hidden = true; });
+  }
+});
 
 function renderBuiltInTabsList() {
   const el = document.getElementById('builtin-tabs-list');
@@ -1214,8 +1272,10 @@ function renderBuiltInTabsList() {
     const label = typeof o.label === 'string' && o.label ? o.label : t.defaultLabel;
     const order = Number.isFinite(o.order) ? o.order : i + 1;
     const hidden = !!o.hidden;
+    const fallbackIcon = DEFAULT_BUILT_IN_ICON[t.id] || 'file';
     return `<div class="mgr-item" data-builtin="${esc(t.id)}">
-      <div class="mgr-main" style="display:grid;grid-template-columns:1fr 90px auto;gap:8px;align-items:center">
+      <div class="mgr-main" style="display:grid;grid-template-columns:auto 1fr 90px auto;gap:8px;align-items:center">
+        <div data-fallback="${esc(fallbackIcon)}">${iconPickerHtml('iconName', o.iconName || '', fallbackIcon)}</div>
         <input class="input" data-field="label" value="${esc(label)}" placeholder="${esc(t.defaultLabel)}" maxlength="30" aria-label="Label for ${esc(t.id)}">
         <input class="input" data-field="order" type="number" value="${esc(order)}" step="1" aria-label="Order for ${esc(t.id)}">
         <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--muted);white-space:nowrap">
@@ -1225,6 +1285,32 @@ function renderBuiltInTabsList() {
       </div>
     </div>`;
   }).join('');
+  // Copy the fallback icon down to each picker so the "clear" option previews correctly.
+  el.querySelectorAll('[data-builtin]').forEach((row) => {
+    const fallback = row.querySelector('[data-fallback]')?.dataset.fallback || 'file';
+    const picker = row.querySelector('.icon-picker');
+    if (picker) picker.dataset.fallback = fallback;
+  });
+  wireIconPicker(el);
+}
+
+function renderDefaultTabSelect() {
+  const sel = document.getElementById('default-tab');
+  if (!sel) return;
+  const current = adminState.defaultTab || '';
+  const custom = adminState.appTabs || [];
+  const opts = [
+    `<option value="">News (default)</option>`,
+    ...BUILT_IN_TABS.map((t) => {
+      const label = adminState.builtInTabs?.[t.id]?.label || t.defaultLabel;
+      return `<option value="${esc(t.id)}" ${current === t.id ? 'selected' : ''}>${esc(label)}</option>`;
+    }),
+    ...custom.map((t) => {
+      const id = 'ct-' + t.id;
+      return `<option value="${esc(id)}" ${current === id ? 'selected' : ''}>${esc(t.title)} (custom)</option>`;
+    }),
+  ];
+  sel.innerHTML = opts.join('');
 }
 
 async function saveBuiltInTabs() {
@@ -1235,29 +1321,36 @@ async function saveBuiltInTabs() {
     const label = row.querySelector('[data-field="label"]').value.trim();
     const order = Number(row.querySelector('[data-field="order"]').value);
     const hidden = row.querySelector('[data-field="hidden"]').checked;
+    const iconName = row.querySelector('.icon-picker').dataset.value || '';
     const entry = {};
     if (label && label !== def.defaultLabel) entry.label = label;
     if (Number.isFinite(order)) entry.order = order;
     if (hidden) entry.hidden = true;
+    if (iconName) entry.iconName = iconName;
     if (Object.keys(entry).length) payload[id] = entry;
   });
+  const defaultTab = document.getElementById('default-tab').value || '';
   const btn = document.getElementById('builtin-save');
   if (btn) btn.disabled = true;
   try {
-    const r = await API.put('/theme', { builtInTabs: payload }, true);
+    const r = await API.put('/theme', { builtInTabs: payload, defaultTab }, true);
     adminState.builtInTabs = (r && r.builtInTabs) || {};
+    adminState.defaultTab = (r && r.defaultTab) || '';
     renderBuiltInTabsList();
-    toast('Built-in tabs updated.', 'success');
+    renderDefaultTabSelect();
+    toast('Built-in tab settings updated.', 'success');
   } catch (e) { handleAdminErr(e); }
   finally { if (btn) btn.disabled = false; }
 }
 
 async function resetBuiltInTabs() {
-  if (!confirm('Reset all built-in tabs to their default label and order?')) return;
+  if (!confirm('Reset all built-in tabs to their default label, icon, order, and clear the default landing tab?')) return;
   try {
-    const r = await API.put('/theme', { builtInTabs: {} }, true);
+    const r = await API.put('/theme', { builtInTabs: {}, defaultTab: '' }, true);
     adminState.builtInTabs = (r && r.builtInTabs) || {};
+    adminState.defaultTab = (r && r.defaultTab) || '';
     renderBuiltInTabsList();
+    renderDefaultTabSelect();
     toast('Built-in tabs reset.', 'success');
   } catch (e) { handleAdminErr(e); }
 }
@@ -1266,6 +1359,9 @@ async function loadAppTabs() {
   try { adminState.appTabs = await API.get('/tabs', true); }
   catch (e) { const el = document.getElementById('tab-list'); if (el) el.innerHTML = errorHtml(e.message); return; }
   renderAppTabList();
+  // The default-tab dropdown lists custom tabs too, so re-render it once
+  // the custom list is known.
+  renderDefaultTabSelect();
 }
 
 function renderAppTabList() {
@@ -1308,7 +1404,8 @@ function tabContentField(type, content) {
 
 function openTabEditor(item) {
   const ed = document.getElementById('tab-editor');
-  const it = item || { title: '', route: '', content_type: 'static', content: '', order: (adminState.appTabs.length + 1) * 10, permissions: 'all' };
+  const it = item || { title: '', route: '', content_type: 'static', content: '', order: (adminState.appTabs.length + 1) * 10, permissions: 'all', iconName: '' };
+  const fallbackIcon = CUSTOM_TAB_ICON[it.content_type] || 'file';
   ed.innerHTML = `
     <div class="editor">
       <div class="row2">
@@ -1323,8 +1420,13 @@ function openTabEditor(item) {
         <div class="field"><label>Visible to</label>
           <select class="select" id="tab-perm">${TAB_PERMS.map((p) => `<option value="${p.v}" ${p.v === (it.permissions || 'all') ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
       </div>
-      <div class="field"><label>Order <span class="hint">— lower numbers appear first</span></label>
-        <input class="input" id="tab-order" type="number" value="${esc(it.order || 0)}" style="max-width:140px"></div>
+      <div class="row2">
+        <div class="field"><label>Icon <span class="hint">— shown in the client nav bar</span></label>
+          <div id="tab-icon-wrap" data-fallback="${esc(fallbackIcon)}">${iconPickerHtml('iconName', it.iconName || '', fallbackIcon)}</div>
+        </div>
+        <div class="field"><label>Order <span class="hint">— lower numbers appear first</span></label>
+          <input class="input" id="tab-order" type="number" value="${esc(it.order || 0)}"></div>
+      </div>
       <div class="field"><label>Content</label><div id="tab-content-wrap">${tabContentField(it.content_type, it.content)}</div></div>
       <div class="editor-actions">
         <button class="btn btn-ghost btn-sm" id="tab-cancel">Cancel</button>
@@ -1336,6 +1438,10 @@ function openTabEditor(item) {
     const cur = document.getElementById('tab-content');
     document.getElementById('tab-content-wrap').innerHTML = tabContentField(e.target.value, cur ? cur.value : '');
   });
+  const iconWrap = document.getElementById('tab-icon-wrap');
+  const picker = iconWrap.querySelector('.icon-picker');
+  if (picker) picker.dataset.fallback = iconWrap.dataset.fallback;
+  wireIconPicker(iconWrap);
   document.getElementById('tab-cancel').addEventListener('click', () => { ed.innerHTML = ''; });
   document.getElementById('tab-save').addEventListener('click', () => saveAppTab(item ? item.id : null));
   document.getElementById('tab-title').focus();
@@ -1343,6 +1449,7 @@ function openTabEditor(item) {
 
 async function saveAppTab(id) {
   const contentEl = document.getElementById('tab-content');
+  const iconPicker = document.querySelector('#tab-icon-wrap .icon-picker');
   const payload = {
     title: val('tab-title').trim(),
     route: val('tab-route').trim(),
@@ -1350,6 +1457,7 @@ async function saveAppTab(id) {
     content: contentEl ? contentEl.value : '',
     order: Number(val('tab-order')) || 0,
     permissions: val('tab-perm'),
+    iconName: iconPicker ? (iconPicker.dataset.value || '') : '',
   };
   if (!payload.title) { toast('Please enter a tab title.', 'error'); return; }
   if (payload.content_type === 'external-link' && !/^https?:\/\//i.test(payload.content.trim())) {

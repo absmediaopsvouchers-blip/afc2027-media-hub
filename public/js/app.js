@@ -25,28 +25,46 @@ function customTabId(t) { return 'ct-' + t.id; }
 // Merge built-in tabs with THEME.builtInTabs overrides + admin custom tabs.
 // Sort order: built-ins default to their declaration index; overrides may set
 // a numeric `order`; custom tabs use their own `order` field (falling back to
-// after the built-ins).
+// after the built-ins). Every tab resolves its icon via THEME override first,
+// then per-tab default, then the content-type default for custom tabs.
 function allTabs() {
   const overrides = (typeof THEME === 'object' && THEME && THEME.builtInTabs) || {};
   const built = TABS
     .map((t, i) => {
       const o = overrides[t.id] || {};
+      const icon = (typeof o.iconName === 'string' && o.iconName && ICONS[o.iconName]) ? o.iconName : t.icon;
       return {
         ...t,
+        icon,
         label: (typeof o.label === 'string' && o.label.trim()) ? o.label.trim() : t.label,
         order: Number.isFinite(o.order) ? o.order : i + 1,
         hidden: !!o.hidden,
       };
     })
     .filter((t) => !t.hidden);
-  const custom = (state.customTabs || []).map((t, i) => ({
-    id: customTabId(t),
-    label: t.title,
-    icon: CUSTOM_TAB_ICON[t.content_type] || 'file',
-    custom: t,
-    order: Number.isFinite(t.order) ? t.order : 100 + i,
-  }));
+  const custom = (state.customTabs || []).map((t, i) => {
+    const fallback = CUSTOM_TAB_ICON[t.content_type] || 'file';
+    const icon = (typeof t.iconName === 'string' && t.iconName && ICONS[t.iconName]) ? t.iconName : fallback;
+    return {
+      id: customTabId(t),
+      label: t.title,
+      icon,
+      custom: t,
+      order: Number.isFinite(t.order) ? t.order : 100 + i,
+    };
+  });
   return [...built, ...custom].sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+/** Which tab should the app land on when there's no hash and no explicit
+ *  navigation? Resolves THEME.defaultTab (admin choice) against the currently
+ *  available tabs, then falls back to News, then to the first visible tab. */
+function resolveDefaultTab() {
+  const configured = (typeof THEME === 'object' && THEME && THEME.defaultTab) || '';
+  const tabs = allTabs();
+  if (configured && tabs.some((t) => t.id === configured)) return configured;
+  if (tabs.some((t) => t.id === 'news')) return 'news';
+  return tabs.length ? tabs[0].id : 'voucher';
 }
 
 // Returning users only enter their email — we cache it locally so the form is
@@ -94,14 +112,36 @@ function init() {
 
   buildNavs();
 
-  // Restore tab from URL hash (so a refresh keeps you in place). A hash like
-  // "#news?article=NW-2001" (from a tapped push notification) also selects
-  // which article to scroll to and highlight once the News tab renders.
+  // Restore tab from URL hash first (so a refresh or a tapped push notification
+  // lands on the right screen). A hash like "#news?article=NW-2001" also
+  // selects which article to scroll to and highlight once News renders.
   const { tabId, articleId } = parseHash();
   if (TABS.some((t) => t.id === tabId)) state.tab = tabId;
   if (articleId) state.newsDeepLinkId = articleId;
 
-  loadConfig().then(() => render());
+  loadConfig().then(() => {
+    // No explicit hash yet — apply the admin-configured default tab (falls
+    // back to News). Only runs on a clean cold launch, so a mid-session hash
+    // navigation is never overridden.
+    if (!location.hash) {
+      const target = resolveDefaultTab();
+      if (target && allTabs().some((t) => t.id === target)) state.tab = target;
+    }
+    render();
+  });
+
+  // Re-pull /api/theme when the tab comes back into the foreground — a
+  // fresh admin edit made while the user was away lands without a manual
+  // reload. API responses are always network (never cached), so this is
+  // cheap and doesn't need a cache-buster.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    loadTheme().then(() => {
+      buildNavs();
+      applyLogo(THEME.logo);
+      updateNavActive();
+    });
+  });
 }
 
 async function loadConfig() {

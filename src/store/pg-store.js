@@ -138,8 +138,10 @@ async function migrate() {
       content_type TEXT NOT NULL DEFAULT 'static',
       content      TEXT,
       "order"      INTEGER NOT NULL DEFAULT 0,
-      permissions  TEXT NOT NULL DEFAULT 'all'
+      permissions  TEXT NOT NULL DEFAULT 'all',
+      icon_name    TEXT NOT NULL DEFAULT ''
     );
+    ALTER TABLE tabs ADD COLUMN IF NOT EXISTS icon_name TEXT NOT NULL DEFAULT '';
     CREATE TABLE IF NOT EXISTS audit_log (
       id     TEXT PRIMARY KEY,
       action TEXT NOT NULL,
@@ -542,7 +544,7 @@ async function deleteCategory(id) {
 // ---- custom client-app tabs ---------------------------------------------------
 
 function toTab(r) {
-  return { id: r.id, title: r.title, route: r.route, content_type: r.content_type, content: r.content, order: r.order, permissions: r.permissions };
+  return { id: r.id, title: r.title, route: r.route, content_type: r.content_type, content: r.content, order: r.order, permissions: r.permissions, iconName: r.icon_name || '' };
 }
 
 async function listTabs() {
@@ -551,14 +553,14 @@ async function listTabs() {
 }
 
 async function createTab(tab) {
-  await q('INSERT INTO tabs (id, title, route, content_type, content, "order", permissions) VALUES ($1,$2,$3,$4,$5,$6,$7)', [
-    tab.id, tab.title, tab.route, tab.content_type, tab.content, tab.order, tab.permissions,
+  await q('INSERT INTO tabs (id, title, route, content_type, content, "order", permissions, icon_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [
+    tab.id, tab.title, tab.route, tab.content_type, tab.content, tab.order, tab.permissions, tab.iconName || '',
   ]);
   return tab;
 }
 
 async function updateTab(id, fields) {
-  const colMap = { title: 'title', route: 'route', content_type: 'content_type', content: 'content', order: '"order"', permissions: 'permissions' };
+  const colMap = { title: 'title', route: 'route', content_type: 'content_type', content: 'content', order: '"order"', permissions: 'permissions', iconName: 'icon_name' };
   const sets = [];
   const vals = [];
   for (const [f, col] of Object.entries(colMap)) {

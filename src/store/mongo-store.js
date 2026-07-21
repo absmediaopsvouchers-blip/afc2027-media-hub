@@ -67,7 +67,7 @@ async function init() {
   const Transport = model('Transport', new Schema({ id: { type: String, unique: true }, route: String, type: String, from: String, to: String, frequency: String, firstDeparture: String, lastDeparture: String, duration: String, notes: String }, opts));
   const Category = model('Category', new Schema({ id: { type: String, unique: true }, name: String, color: String }, opts));
   const Settings = model('Settings', new Schema({ key: { type: String, unique: true }, data: { type: Object, default: {} } }, opts));
-  const Tab = model('Tab', new Schema({ id: { type: String, unique: true }, title: String, route: String, content_type: String, content: String, order: Number, permissions: String }, opts));
+  const Tab = model('Tab', new Schema({ id: { type: String, unique: true }, title: String, route: String, content_type: String, content: String, order: Number, permissions: String, iconName: { type: String, default: '' } }, opts));
   const Audit = model('Audit', new Schema({ id: { type: String, unique: true }, action: String, detail: String, actor: String, at: String }, opts));
   const PushSubscription = model('PushSubscription', new Schema({
     endpoint: { type: String, unique: true },
@@ -311,7 +311,7 @@ async function createTab(tab) {
 }
 
 async function updateTab(id, fields) {
-  const allowed = pick(fields, ['title', 'route', 'content_type', 'content', 'order', 'permissions']);
+  const allowed = pick(fields, ['title', 'route', 'content_type', 'content', 'order', 'permissions', 'iconName']);
   return strip(await models.Tab.findOneAndUpdate({ id }, { $set: allowed }, { new: true }).lean());
 }
 
