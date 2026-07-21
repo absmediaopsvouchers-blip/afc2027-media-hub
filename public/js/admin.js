@@ -67,20 +67,11 @@ function init() {
   logout.innerHTML = ICONS.logout + '<span>Lock</span>';
   logout.addEventListener('click', () => { Admin.clear(); teardownTransients(); showLogin(); });
 
-  startClock();
-
   // Apply saved branding to the admin shell too (colours, font, logo, bg).
   loadTheme().then(() => applyLogo(THEME.logo));
 
   if (Admin.key()) showDashboard();
   else showLogin();
-}
-
-function startClock() {
-  const el = document.getElementById('clock');
-  const tick = () => { el.textContent = fmtClock(new Date()); };
-  tick();
-  setInterval(tick, 1000);
 }
 
 /* ---- login gate ----------------------------------------------------------- */

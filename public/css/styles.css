@@ -110,7 +110,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
   box-shadow: 0 2px 14px rgba(13, 26, 51, .28);
 }
 
-.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; flex: none; }
 
 .brand-mark {
   width: 42px; height: 42px;
@@ -123,7 +123,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 .brand-mark svg { width: 24px; height: 24px; color: #fff; }
 
 .brand-text { min-width: 0; }
-.brand-title { font-size: 1.06rem; font-weight: 700; letter-spacing: -.02em; }
+.brand-title { font-size: 1.06rem; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
 .brand-sub {
   font-size: .68rem; font-weight: 600; letter-spacing: .12em;
   text-transform: uppercase; color: #9fb6e8;
@@ -132,11 +132,9 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 
 .appbar-spacer { flex: 1; }
 
-.appbar-right { display: flex; align-items: center; gap: 14px; }
-.clock {
-  font-family: var(--mono); font-size: .95rem; font-weight: 500;
-  color: #cdd8ee; letter-spacing: .04em;
-}
+/* margin-left: auto keeps the admin button pinned to the right edge whether
+   the topnav is present (desktop) or hidden (mobile). */
+.appbar-right { display: flex; align-items: center; gap: 14px; flex: none; margin-left: auto; }
 
 .appbar-link {
   display: inline-flex; align-items: center; gap: 7px;
@@ -149,14 +147,26 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 .appbar-link:hover { background: rgba(255, 255, 255, .2); }
 .appbar-link svg { width: 16px; height: 16px; }
 
-/* desktop top nav (tabs in the appbar) */
-.topnav { display: flex; gap: 4px; }
+/* Top nav (tabs in the appbar). Scrolls horizontally when the tab set is
+   wider than the space between brand and admin — required on tablets where
+   longer custom tabs like "Tournament Info" would otherwise overflow the row
+   and collide with the brand mark. */
+.topnav {
+  display: flex; gap: 4px;
+  min-width: 0;               /* allow shrinking below content width */
+  overflow-x: auto;
+  scrollbar-width: none;      /* Firefox */
+  -webkit-overflow-scrolling: touch;
+}
+.topnav::-webkit-scrollbar { display: none; }
 .topnav button {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 9px 15px; border-radius: 999px;
   background: transparent; border: 0; cursor: pointer;
   color: #c4d2ee; font-weight: 600; font-size: .92rem;
   transition: background .15s, color .15s;
+  flex: none;                 /* don't compress individual tabs */
+  white-space: nowrap;        /* keep two-word labels on one line */
 }
 .topnav button svg { width: 18px; height: 18px; }
 .topnav button:hover { color: #fff; background: rgba(255, 255, 255, .1); }
@@ -611,7 +621,6 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 }
 @media (max-width: 759px) {
   .topnav { display: none; }
-  .clock { display: none; }
   .brand-sub { display: none; }
 }
 

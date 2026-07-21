@@ -71,7 +71,6 @@ function init() {
   if (cached) state.form.email = cached;
 
   buildNavs();
-  startClock();
 
   // Restore tab from URL hash (so a refresh keeps you in place). A hash like
   // "#news?article=NW-2001" (from a tapped push notification) also selects
@@ -164,13 +163,6 @@ function scrollViewTop(smooth) {
 
 function updateNavActive() {
   $all('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
-}
-
-function startClock() {
-  const el = document.getElementById('clock');
-  const tick = () => { el.textContent = fmtClock(new Date()); };
-  tick();
-  setInterval(tick, 1000);
 }
 
 function render() {

@@ -68,8 +68,6 @@ function $all(sel, root) { return Array.from((root || document).querySelectorAll
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
-function fmtClock(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
-
 function fmtTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
