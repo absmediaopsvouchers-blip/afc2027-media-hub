@@ -210,11 +210,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
   width: 100%;
   max-width: var(--maxw);
   margin-inline: auto;        /* centre the content column on wide screens */
-  /* Safe-area fallback: on tablets/desktop the bottomnav is display:none, so
-     the content column is the last child of the body. Without this, the last
-     card would sit under the home-indicator zone. On phones the bottomnav
-     already claims the safe area, so the extra padding here is a no-op. */
-  padding: 22px 16px calc(36px + env(safe-area-inset-bottom, 0px));
+  padding: 22px 16px 36px;    /* on phones the bottomnav below owns the safe area */
   animation: fadeIn .25s ease;
 }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -632,10 +628,11 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 /* Only reserve room for the home-indicator zone when the app is actually
    installed as a PWA — inside Safari's browser mode the URL bar already
    occupies that space, and adding safe-area padding there creates a visible
-   dead strip (the iPhone 15 Pro Max complaint). */
+   dead strip (the iPhone 15 Pro Max complaint). Padding alone is enough — the
+   nav's natural height already exceeds --bottomnav-h once icons + labels are
+   in place, so no min-height gymnastics are needed. */
 @media (display-mode: standalone) {
   .bottomnav {
-    min-height: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
@@ -684,6 +681,10 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 
 @media (min-width: 760px) {
   .bottomnav { display: none; }
+  /* Bottomnav is hidden at tablet+ widths, so .view is the last child of the
+     body. Extend its bottom padding to keep the last card off the home
+     indicator on iPad Pros; on phones the bottomnav handles that instead. */
+  .view { padding-bottom: calc(36px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 759px) {
   .topnav { display: none; }
