@@ -337,7 +337,7 @@ function renderMealsLogin(errorMsg) {
   const f = state.form;
   view().innerHTML = `
     ${pageHead('Meal Voucher', 'Sign in with your accredited email to access your meal vouchers.')}
-    <div class="card card-pad">
+    <div class="card meals-login-card">
       <div id="login-alert">${errorMsg ? `<div class="alert alert-error login-error">${ICONS.ban}<div>${esc(errorMsg)}</div></div>` : ''}</div>
       <div class="field">
         <label for="login-email">Accredited email address</label>
@@ -345,9 +345,7 @@ function renderMealsLogin(errorMsg) {
                placeholder="you@press.example" value="${esc(f.email)}">
       </div>
       <button class="btn btn-primary btn-block" id="login-submit">${ICONS.lock}<span>Continue</span></button>
-      <p class="muted" style="font-size:.84rem;margin:12px 2px 0;text-align:center">
-        Only media registered at the MMC/SMC Media Welcome desk can generate meal vouchers.
-      </p>
+      <p class="meals-login-hint">Only media registered at the MMC/SMC Media Welcome desk can generate meal vouchers.</p>
     </div>
   `;
   const emailEl = document.getElementById('login-email');
@@ -439,8 +437,11 @@ function renderVoucherForm() {
   fetchActiveForAuth();
 }
 
-/** Fetch the signed-in user's active voucher(s) and, if any, render one as a
- *  ticket immediately (bypassing the generate screen). */
+/** Fetch the signed-in user's voucher(s) for today and list them (each tappable
+ *  to reveal its QR). We deliberately do NOT auto-open a ticket — logging in
+ *  just lands you on the tab with your existing vouchers + the request form, so
+ *  nothing looks auto-generated. Cross-device still works: a voucher made on a
+ *  laptop shows in this list on the phone, ready to tap. */
 async function fetchActiveForAuth() {
   if (!state.auth) return;
   try {
@@ -450,16 +451,10 @@ async function fetchActiveForAuth() {
     } else {
       data = await API.get('/vouchers?email=' + encodeURIComponent(state.auth.email));
     }
-    const active = (data.vouchers || []).filter((v) => v.status === 'Pending');
     state.myVouchers = data.vouchers || [];
     state.myVouchersDate = data.date;
     saveCachedVouchers();
-    if (active.length) {
-      // Show the most recent active voucher directly.
-      showTicket(active[active.length - 1], false);
-    } else {
-      renderMyVouchers();
-    }
+    renderMyVouchers();
   } catch (e) { /* best-effort — the form still works */ }
 }
 
@@ -644,6 +639,7 @@ function showTicket(v, registeredNow) {
   const mealLabel = v.mealType === 'Meal' ? 'Media Café Meal' : v.mealType;
   const kicker = v.locationType === 'Stadium' ? 'Stadium · Media Café' : v.locationType;
   document.getElementById('v-result').innerHTML = `
+    <button class="btn btn-ghost btn-sm ticket-back" id="v-back">${ICONS.back}<span>Back to my vouchers</span></button>
     <div class="ticket">
       <div class="ticket-top type-${esc(v.locationType)}">
         <div>
@@ -671,16 +667,23 @@ function showTicket(v, registeredNow) {
   const mine = document.getElementById('v-mine');
   if (mine) mine.classList.add('hidden');
   scrollViewTop(true);
-  document.getElementById('v-again').addEventListener('click', () => {
-    stopTicketPoll();
-    document.getElementById('v-result').innerHTML = '';
-    document.getElementById('v-form-card').classList.remove('hidden');
-    const m = document.getElementById('v-mine');
-    if (m) m.classList.remove('hidden');
-    renderMyVouchers();
-  });
+  document.getElementById('v-back').addEventListener('click', closeTicket);
+  document.getElementById('v-again').addEventListener('click', closeTicket);
 
   startTicketPoll(v.id);
+}
+
+/** Leave the ticket view and return to the voucher list + request form. */
+function closeTicket() {
+  stopTicketPoll();
+  const result = document.getElementById('v-result');
+  if (result) result.innerHTML = '';
+  const form = document.getElementById('v-form-card');
+  if (form) form.classList.remove('hidden');
+  const mine = document.getElementById('v-mine');
+  if (mine) mine.classList.remove('hidden');
+  renderMyVouchers();
+  scrollViewTop();
 }
 
 /* Open one of the user's saved vouchers (from the "today" list) as a full ticket. */

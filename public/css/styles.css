@@ -64,11 +64,16 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   line-height: 1.5;
-  /* App-shell: pin to the visible viewport height and scroll the content area
-     internally. This keeps the bottom nav from jumping as the mobile browser
-     toolbar shows/hides (uses dvh so it tracks the live visible height). */
-  height: 100vh;
-  height: 100dvh;
+  /* App-shell: pin to the layout viewport with position:fixed + inset:0 rather
+     than height:100dvh. On iOS home-screen PWAs, dvh/vh mis-measure on first
+     paint (leaving a dead strip at the bottom that only a rotate fixes, and a
+     brief nav "shake" as it corrects) and the window scrolls the header under
+     the status bar when the keyboard opens. inset:0 sizes to the full layout
+     viewport immediately and stays put through keyboard show/hide, so the
+     header never jams and the bottom nav never drifts. The .view scrolls
+     internally. */
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -247,29 +252,44 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
    Meals login gate + signed-in bar
    ========================================================================== */
 
+/* Compact login card — keep the sign-in area small so it doesn't dominate
+   the screen on tall phones. */
+.meals-login-card { padding: 16px; }
+.meals-login-card .field { margin-bottom: 12px; }
+.meals-login-hint { font-size: .8rem; margin: 10px 2px 0; text-align: center; color: var(--muted); }
+
 /* The exact closed-loop rejection message — shown prominently. */
 .login-error { align-items: flex-start; font-weight: 600; }
 .login-error svg { width: 20px; height: 20px; }
 
+/* Signed-in identity strip — compact, single line with the email truncating. */
 .signed-in-bar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 10px 14px; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 11px; margin-bottom: 12px;
   background: var(--good-soft); color: var(--good);
   border: 1px solid rgba(19, 138, 74, .25); border-radius: var(--r-sm);
-  font-size: .88rem; font-weight: 600;
+  font-size: .8rem; font-weight: 600;
 }
-.signed-in-bar svg { width: 16px; height: 16px; flex: none; }
+.signed-in-bar svg { width: 15px; height: 15px; flex: none; }
+.signed-in-bar > span {
+  min-width: 0; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .signed-in-bar strong { color: var(--ink); font-weight: 700; }
 .signed-in-bar .mono { color: var(--ink-2); }
 .link-btn {
-  margin-left: auto;
-  display: inline-flex; align-items: center; gap: 5px;
+  flex: none;
+  display: inline-flex; align-items: center; gap: 4px;
   background: none; border: 0; cursor: pointer;
-  color: var(--muted); font-weight: 600; font-size: .82rem;
-  padding: 4px 6px; border-radius: 8px;
+  color: var(--muted); font-weight: 600; font-size: .8rem;
+  padding: 3px 5px; border-radius: 8px;
 }
 .link-btn:hover { background: rgba(0, 0, 0, .05); color: var(--ink); }
-.link-btn svg { width: 15px; height: 15px; }
+.link-btn svg { width: 14px; height: 14px; }
+
+/* Back control above a voucher ticket. */
+.ticket-back { margin-bottom: 12px; padding-left: 10px; padding-right: 14px; }
+.ticket-back svg { width: 16px; height: 16px; }
 
 /* =============================================================================
    Forms
