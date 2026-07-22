@@ -622,19 +622,19 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--line);
   box-shadow: 0 -6px 26px rgba(16, 26, 46, .1);
+  /* Paint the nav's own background into the home-indicator safe area on all
+     devices. env(safe-area-inset-bottom) is ~0 in desktop/Android/Safari-tab
+     contexts (harmless there) and ~34px in an installed iOS PWA — where it
+     fills the gap that was previously showing the page background below the
+     bar. Applied unconditionally rather than gated on
+     @media (display-mode: standalone), which iOS home-screen PWAs do not
+     reliably match. The button row is the flex content box (min-height 66px);
+     the safe-area padding sits below it and inherits the white background, so
+     the buttons stay centred in the 66px strip and never sink into the
+     indicator. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
-}
-/* Only reserve room for the home-indicator zone when the app is actually
-   installed as a PWA — inside Safari's browser mode the URL bar already
-   occupies that space, and adding safe-area padding there creates a visible
-   dead strip (the iPhone 15 Pro Max complaint). Padding alone is enough — the
-   nav's natural height already exceeds --bottomnav-h once icons + labels are
-   in place, so no min-height gymnastics are needed. */
-@media (display-mode: standalone) {
-  .bottomnav {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
 }
 .bottomnav::-webkit-scrollbar { display: none; }
 .bottomnav button {
