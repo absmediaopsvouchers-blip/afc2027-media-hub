@@ -315,8 +315,26 @@ function applyLogo(logo) {
   mark.style.boxShadow = 'none';
 }
 
+// Last-known theme is cached so it can be applied on the very first paint,
+// before the network round-trip — this removes the default→custom "flash of
+// unbranded content" (wrong colours and built-in tab labels appearing for a
+// moment before the admin's branding loads).
+const THEME_CACHE_KEY = 'mh.theme';
+
+/** Read the cached theme (or {}). Safe to call before the DOM is ready. */
+function readCachedTheme() {
+  try { return JSON.parse(localStorage.getItem(THEME_CACHE_KEY) || 'null') || {}; }
+  catch (e) { return {}; }
+}
+
 async function loadTheme() {
-  try { THEME = (await API.get('/theme')) || {}; } catch (e) { THEME = {}; }
+  try {
+    THEME = (await API.get('/theme')) || {};
+    try { localStorage.setItem(THEME_CACHE_KEY, JSON.stringify(THEME)); } catch (e) { /* storage may be full/blocked */ }
+  } catch (e) {
+    // Offline / error — keep the cached theme rather than reverting to defaults.
+    THEME = readCachedTheme();
+  }
   applyTheme(THEME);
   return THEME;
 }

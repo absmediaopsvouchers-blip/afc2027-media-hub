@@ -2,12 +2,16 @@
    Service worker — offline-friendly app shell for the Media Hub PWA.
 
    Strategy:
-     • App shell (HTML/CSS/JS/icons): cache-first, refreshed in the background.
+     • Documents / CSS / JS / manifest: NETWORK-FIRST, cache fallback. A deploy
+       is picked up on the very next launch — no stale-shell flash, and no
+       stale index.html keeping an old viewport meta (which was leaving a dead
+       strip below the bottom nav on iOS).
+     • Icons / fonts / vendor / images: cache-first (fast, rarely change).
      • API calls (/api/*): always network — never cached (data must be live and
        the daily voucher limits must be enforced server-side).
    ========================================================================== */
 
-const CACHE = 'media-hub-v25';
+const CACHE = 'media-hub-v26';
 
 const SHELL = [
   '/',
@@ -44,24 +48,6 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Manifest reflects admin-configured branding (name + logo) — always fetch
-  // fresh so the install prompt and home-screen icon stay current; fall back to
-  // the last cached copy when offline.
-  if (url.pathname === '/manifest.webmanifest') {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match(req))
-    );
-    return;
-  }
-
   // Never cache API responses — always go to the network.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(req).catch(() => new Response(
@@ -71,10 +57,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell: serve from cache, then refresh the cached copy in the background.
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
+  // Documents, styles, scripts and the manifest: NETWORK-FIRST. Fetch the live
+  // copy, refresh the cache, and only fall back to cache when offline. This is
+  // what guarantees a freshly deployed layout/viewport is used on the next
+  // launch instead of a cached-from-a-previous-version shell.
+  const freshFirst =
+    req.mode === 'navigate' ||
+    url.pathname === '/' ||
+    url.pathname === '/manifest.webmanifest' ||
+    /\.(?:html|css|js|webmanifest)$/.test(url.pathname);
+
+  if (freshFirst) {
+    event.respondWith(
+      fetch(req)
         .then((res) => {
           if (res && res.status === 200) {
             const copy = res.clone();
@@ -82,9 +77,20 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => cached);
-      return cached || network;
-    })
+        .catch(() => caches.match(req).then((c) => c || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // Everything else (icons, fonts, vendor, images): cache-first for speed.
+  event.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+      if (res && res.status === 200) {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, copy));
+      }
+      return res;
+    }))
   );
 });
 

@@ -106,9 +106,30 @@ function parseHash() {
 
 /* ---- shell ---------------------------------------------------------------- */
 
+/** Apply the header title/subtitle from a theme object (cached or fresh). */
+function applyBrandTextFromTheme(t, meta) {
+  t = t || {};
+  const titleEl = document.querySelector('.brand-title');
+  if (titleEl && t.headerTitle) titleEl.textContent = t.headerTitle;
+  const subEl = document.getElementById('brand-sub');
+  if (subEl) {
+    const sub = t.headerSubtitle || (meta && meta.event) || (state.meta && state.meta.event) || '';
+    if (sub) subEl.textContent = sub;
+  }
+}
+
 function init() {
   document.getElementById('brand-mark').innerHTML = ICONS.ticket;
   document.getElementById('admin-link').innerHTML = ICONS.lock + '<span>Admin</span>';
+
+  // Apply the last-known branding synchronously, BEFORE the first render, so the
+  // custom colours, logo, header text and built-in tab labels are correct on
+  // first paint. Without this the app briefly shows the default theme and tab
+  // names, then flashes to the admin's branding once /api/theme resolves.
+  THEME = readCachedTheme();
+  applyTheme(THEME);
+  applyLogo(THEME.logo);
+  applyBrandTextFromTheme(THEME);
 
   // Restore the cached email so returning users skip re-entering it.
   const cached = localStorage.getItem(EMAIL_KEY);
@@ -149,6 +170,7 @@ function init() {
     loadTheme().then(() => {
       buildNavs();
       applyLogo(THEME.logo);
+      applyBrandTextFromTheme(THEME);
       updateNavActive();
     });
   });
@@ -171,10 +193,7 @@ async function loadConfig() {
     const { tabId } = parseHash();
     if (allTabs().some((t) => t.id === tabId)) state.tab = tabId;
     applyLogo(THEME.logo);
-    const titleEl = document.querySelector('.brand-title');
-    if (titleEl && THEME.headerTitle) titleEl.textContent = THEME.headerTitle;
-    const subEl = document.getElementById('brand-sub');
-    if (subEl) subEl.textContent = THEME.headerSubtitle || (meta && meta.event) || '';
+    applyBrandTextFromTheme(THEME, meta);
     if (!state.form.locationId && state.locations.length) {
       // Default to the first venue that actually offers meals (skips Training etc.).
       const first = state.locations.find((l) => l.allowedMeals && l.allowedMeals.length);
