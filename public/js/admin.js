@@ -315,10 +315,12 @@ function feedItem(v) {
     : v.status === 'Expired'
       ? `<span class="feed-status expired">Expired</span>`
       : `<span class="feed-status pending">Pending</span>`;
+  // The email opens the client's full meal-history profile (keyed on ACR).
+  const acr = v.accreditationNumber || '';
   return `<div class="feed-item">
     <div class="feed-dot t-${esc(v.locationType)}">${ab}</div>
     <div class="feed-main">
-      <div class="f-email">${esc(v.email)}</div>
+      <button type="button" class="f-email f-email-link" data-profile-acr="${esc(acr)}" data-profile-email="${esc(v.email)}">${esc(v.email)}</button>
       <div class="f-meta">${esc(meal)} · ${esc(v.locationName)} · <span class="mono">${esc(v.id)}</span></div>
     </div>
     <div class="feed-right">
@@ -326,6 +328,80 @@ function feedItem(v) {
       <div class="feed-time">${esc(fmtTime(v.issuedAt))}</div>
     </div>
   </div>`;
+}
+
+/* ---- Client Profile (meal history drill-down) ----------------------------- */
+
+// Delegated once — the live feed re-renders every 5s, so a per-render listener
+// would leak. Any clickable client email opens their profile.
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('[data-profile-acr]');
+  if (!link) return;
+  openClientProfile(link.dataset.profileAcr, link.dataset.profileEmail);
+});
+
+async function openClientProfile(accreditation, email) {
+  // Show a loading modal immediately, then fill it.
+  showClientProfileModal(`<div class="loading"><div class="spinner"></div>Loading profile…</div>`);
+  const qs = accreditation
+    ? 'accreditation=' + encodeURIComponent(accreditation)
+    : 'email=' + encodeURIComponent(email || '');
+  try {
+    const data = await API.get('/admin/client-profile?' + qs, true);
+    renderClientProfile(data);
+  } catch (e) {
+    showClientProfileModal(`<div class="alert alert-error">${ICONS.alert}<div>${esc(e.message)}</div></div>`);
+  }
+}
+
+function showClientProfileModal(inner) {
+  let host = document.getElementById('client-profile-modal');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'client-profile-modal';
+    host.className = 'cp-overlay';
+    host.innerHTML = `<div class="cp-card"><button type="button" class="cp-close" id="cp-close">${ICONS.close}</button><div id="cp-body"></div></div>`;
+    document.body.appendChild(host);
+    host.addEventListener('click', (e) => { if (e.target === host) host.remove(); });
+    host.querySelector('#cp-close').addEventListener('click', () => host.remove());
+  }
+  host.querySelector('#cp-body').innerHTML = inner;
+}
+
+function renderClientProfile(d) {
+  const s = d.summary || { generated: 0, redeemed: 0, outstanding: 0 };
+  const logRows = (d.logs || []).map((l) => {
+    const isRedeem = l.action === 'REDEEMED';
+    return `<tr>
+      <td><span class="cp-tag ${isRedeem ? 'cp-tag-redeem' : 'cp-tag-gen'}">${esc(l.action)}</span></td>
+      <td>${esc(l.shiftWindow || '—')}</td>
+      <td>${esc(l.location || '—')}</td>
+      <td>${esc(l.scannedBy || '—')}</td>
+      <td class="mono">${esc(fmtDateTime(l.timestamp))}</td>
+    </tr>`;
+  }).join('');
+
+  showClientProfileModal(`
+    <div class="cp-head">
+      <div class="cp-avatar">${ICONS.users}</div>
+      <div>
+        <div class="cp-acr mono">${esc(d.accreditationNumber)}</div>
+        <div class="cp-email">${esc(d.email || '—')}</div>
+      </div>
+    </div>
+    <div class="cp-stats">
+      <div class="cp-stat"><div class="cp-stat-n">${s.generated}</div><div class="cp-stat-l">Generated</div></div>
+      <div class="cp-stat"><div class="cp-stat-n">${s.redeemed}</div><div class="cp-stat-l">Consumed</div></div>
+      <div class="cp-stat"><div class="cp-stat-n">${s.outstanding}</div><div class="cp-stat-l">Outstanding</div></div>
+    </div>
+    <div class="section-label">Meal history</div>
+    ${(d.logs && d.logs.length)
+      ? `<div class="cp-table-wrap"><table class="cp-table">
+          <thead><tr><th>Action</th><th>Meal</th><th>Location</th><th>Scanned by</th><th>Time</th></tr></thead>
+          <tbody>${logRows}</tbody>
+        </table></div>`
+      : `<div class="empty" style="padding:22px">No meal activity recorded yet.</div>`}
+  `);
 }
 
 function startPolling() {

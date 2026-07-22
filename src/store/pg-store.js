@@ -155,6 +155,17 @@ async function migrate() {
       auth        TEXT NOT NULL,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS voucher_logs (
+      id                   TEXT PRIMARY KEY,
+      accreditation_number TEXT NOT NULL,
+      voucher_id           TEXT,
+      action               TEXT NOT NULL,          -- 'GENERATED' | 'REDEEMED'
+      shift_window         TEXT,                   -- the meal type (Lunch/Dinner/Meal)
+      location             TEXT,
+      scanned_by           TEXT,
+      "timestamp"          TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_voucher_logs_acr ON voucher_logs (accreditation_number);
   `);
 }
 
@@ -636,6 +647,54 @@ async function deletePushSubscription(endpoint) {
   return rowCount > 0;
 }
 
+// ---- voucher logs (transactional audit trail) --------------------------------
+
+function toVoucherLog(r) {
+  return {
+    id: r.id,
+    accreditationNumber: r.accreditation_number,
+    voucherId: r.voucher_id,
+    action: r.action,
+    shiftWindow: r.shift_window,
+    location: r.location,
+    scannedBy: r.scanned_by,
+    timestamp: iso(r.timestamp),
+  };
+}
+
+async function addVoucherLog(entry) {
+  await q(
+    `INSERT INTO voucher_logs (id, accreditation_number, voucher_id, action, shift_window, location, scanned_by, "timestamp")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [entry.id, entry.accreditationNumber, entry.voucherId, entry.action, entry.shiftWindow, entry.location, entry.scannedBy, entry.timestamp]
+  );
+  return entry;
+}
+
+async function listVoucherLogsByAccreditation(accreditationNumber) {
+  const { rows } = await q(
+    'SELECT * FROM voucher_logs WHERE accreditation_number = $1 ORDER BY "timestamp" DESC',
+    [accreditationNumber]
+  );
+  return rows.map(toVoucherLog);
+}
+
+async function findActiveVouchersByAccreditation({ accreditationNumber, date }) {
+  const { rows } = await q(
+    "SELECT * FROM vouchers WHERE accreditation_number = $1 AND date = $2 AND status = 'Pending' ORDER BY issued_at ASC",
+    [accreditationNumber, date]
+  );
+  return rows.map(toVoucher);
+}
+
+async function findAcrMealVouchers({ accreditationNumber, mealType, date }) {
+  const { rows } = await q(
+    'SELECT * FROM vouchers WHERE accreditation_number = $1 AND meal_type = $2 AND date = $3',
+    [accreditationNumber, mealType, date]
+  );
+  return rows.map(toVoucher);
+}
+
 module.exports = {
   backend,
   init,
@@ -684,4 +743,8 @@ module.exports = {
   listPushSubscriptions,
   savePushSubscription,
   deletePushSubscription,
+  addVoucherLog,
+  listVoucherLogsByAccreditation,
+  findActiveVouchersByAccreditation,
+  findAcrMealVouchers,
 };

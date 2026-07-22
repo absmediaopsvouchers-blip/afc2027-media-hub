@@ -9,7 +9,9 @@
  *     GET    /api/meta                      event branding + timezone + today
  *     GET    /api/locations                 venues + the meals each one offers
  *     GET    /api/user/:email               is this email already registered?
- *     POST   /api/vouchers                  request a voucher (rules enforced)
+ *     POST   /api/auth/login                closed-loop gate: validate email vs MEO roster
+ *     POST   /api/vouchers                  request a voucher (ACR-keyed, shift dedup)
+ *     GET    /api/vouchers/active           today's active vouchers by accreditation (cross-device)
  *     GET    /api/vouchers/:id              live voucher status (Pending/Redeemed)
  *     GET    /api/news                       news feed
  *     GET    /api/press-conferences          schedule
@@ -21,7 +23,8 @@
  *   ADMIN  (require x-admin-key header) — full access
  *     POST   /api/admin/login               validate a key, returns its role
  *     GET    /api/analytics                 dashboard metrics + live feed
- *     POST   /api/admin/redeem              catering: validate & redeem a voucher
+ *     GET    /api/admin/client-profile      one client's full meal history (generated vs consumed)
+ *     POST   /api/admin/redeem              catering: validate & redeem a voucher (logs REDEEMED)
  *     GET    /api/admin/export.csv          download full voucher log (CSV)
  *     POST·PUT·DELETE /api/locations[/:id]  venue manager
  *     POST·PUT·DELETE /api/news[/:id]       news manager (POST also broadcasts a push notification)
@@ -41,8 +44,14 @@ const rateLimit = require('express-rate-limit');
 const QRCode = require('qrcode');
 const store = require('./store');
 const push = require('./push');
+const meoAuth = require('./meo-auth');
 const { allowedMeals, checkEligibility, STATUS, LOCATION_TYPES } = require('./rules');
 const { eventTimezone, todayInTz } = require('./time');
+
+// Exact copy the UI shows (and the closed-loop spec mandates) when an email is
+// not in the MEO accreditation roster.
+const NOT_ACCREDITED_MESSAGE =
+  'Your email and accreditation were not found in the system. Please proceed to the MMC/SMC Media Welcome desk.';
 
 const router = express.Router();
 
@@ -77,6 +86,13 @@ const pushLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 30,
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Too many requests. Please slow down.' },
+});
+// Login/accreditation checks. Moderately strict to blunt email enumeration
+// while staying generous enough for real media staff signing in.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 40,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many attempts. Please wait a few minutes and try again.' },
 });
 
 // ---- helpers ----------------------------------------------------------------
@@ -263,6 +279,30 @@ function requireRedeemAccess(req, res, next) {
   return res.status(401).json({ error: 'Unauthorized — invalid key.' });
 }
 
+/**
+ * Append a voucher lifecycle event to the transactional audit trail, keyed on
+ * the accreditation number. Best-effort — a logging failure never blocks the
+ * voucher operation itself.
+ *   action: 'GENERATED' | 'REDEEMED'
+ *   extra:  { shiftWindow, location, scannedBy }
+ */
+function logVoucher(action, voucher, extra) {
+  const entry = {
+    id: uid('VLOG'),
+    accreditationNumber: voucher.accreditationNumber || '',
+    voucherId: voucher.id,
+    action,
+    shiftWindow: (extra && extra.shiftWindow) || voucher.mealType || '',
+    location: (extra && extra.location) || voucher.locationName || '',
+    scannedBy: (extra && extra.scannedBy) || '',
+    timestamp: new Date().toISOString(),
+  };
+  Promise.resolve()
+    .then(() => store.addVoucherLog(entry))
+    .catch((err) => console.error('[voucher-log] failed to record:', err.message));
+  return entry;
+}
+
 /** Record an admin action in the audit log (best-effort — never blocks the response). */
 async function logAudit(action, detail, actor) {
   try {
@@ -369,6 +409,56 @@ router.get('/user/:email', wrap(async (req, res) => {
   res.json({ known: !!user });
 }));
 
+// ---- Closed-loop authentication gateway -------------------------------------
+// Validates a login email against the MEO Desk Portal's accreditation roster.
+// The Meals/Voucher flow calls this before letting anyone generate a voucher.
+router.post('/auth/login', authLimiter, wrap(async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!isEmail(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  // Strict gate off (no MEO key configured yet): keep the app's open behaviour
+  // so the live system works until the service account is set. The client then
+  // uses the legacy first-contact accreditation flow.
+  if (!meoAuth.configured) {
+    const existing = await store.getUserByEmail(email);
+    return res.json({
+      ok: true,
+      strict: false,
+      accreditationNumber: existing ? existing.accreditationNumber : null,
+      knownLocally: !!existing,
+    });
+  }
+
+  let result;
+  try {
+    result = await meoAuth.lookupClientByEmail(email);
+  } catch (err) {
+    // A backend/Firestore failure must not silently let an unaccredited user
+    // through — surface a retryable error instead.
+    return res.status(503).json({ error: 'Could not verify accreditation right now. Please try again.' });
+  }
+
+  if (!result.found) {
+    return res.status(403).json({ code: 'NOT_ACCREDITED', error: NOT_ACCREDITED_MESSAGE });
+  }
+
+  // Mirror the roster identity into the local users table so downstream lookups
+  // and the audit trail have a consistent record.
+  const existing = await store.getUserByEmail(email);
+  if (!existing) {
+    await store.createUser({ email, accreditationNumber: result.accreditationNumber, createdAt: new Date().toISOString() });
+  }
+
+  res.json({
+    ok: true,
+    strict: true,
+    accreditationNumber: result.accreditationNumber,
+    name: result.name || '',
+  });
+}));
+
 // Issue a voucher — the heart of the system. Every rule is enforced here,
 // server-side, so the browser cannot talk its way around the daily limits.
 router.post('/vouchers', voucherLimiter, wrap(async (req, res) => {
@@ -389,24 +479,59 @@ router.post('/vouchers', voucherLimiter, wrap(async (req, res) => {
     return res.status(400).json({ error: `Please choose a valid meal type for ${location.name}.` });
   }
 
-  // --- Identity: register on first contact, auto-link thereafter. ---
-  let user = await store.getUserByEmail(email);
-  const firstTime = !user;
-  if (!user) {
-    if (!accreditationNumber) {
-      return res.status(400).json({
-        code: 'ACCREDITATION_REQUIRED',
-        error: 'First-time request: please provide your accreditation number.',
-      });
+  // --- Identity: the accreditation number is the primary key (R: closed loop).
+  // When the MEO gate is on, we re-resolve the accreditation from the roster
+  // server-side and IGNORE any client-supplied value, so a tampered request
+  // can't spoof someone else's allowance. When the gate is off, we fall back to
+  // the legacy first-contact behaviour.
+  let acr = accreditationNumber;
+  let firstTime = false;
+  if (meoAuth.configured) {
+    let lookup;
+    try { lookup = await meoAuth.lookupClientByEmail(email); }
+    catch (err) { return res.status(503).json({ error: 'Could not verify accreditation right now. Please try again.' }); }
+    if (!lookup.found) {
+      return res.status(403).json({ code: 'NOT_ACCREDITED', error: NOT_ACCREDITED_MESSAGE });
     }
-    user = { email, accreditationNumber, createdAt: new Date().toISOString() };
-    await store.createUser(user);
+    acr = lookup.accreditationNumber;
+    const existing = await store.getUserByEmail(email);
+    firstTime = !existing;
+    if (!existing) await store.createUser({ email, accreditationNumber: acr, createdAt: new Date().toISOString() });
+  } else {
+    let user = await store.getUserByEmail(email);
+    firstTime = !user;
+    if (!user) {
+      if (!accreditationNumber) {
+        return res.status(400).json({
+          code: 'ACCREDITATION_REQUIRED',
+          error: 'First-time request: please provide your accreditation number.',
+        });
+      }
+      user = { email, accreditationNumber, createdAt: new Date().toISOString() };
+      await store.createUser(user);
+    }
+    acr = user.accreditationNumber;
   }
 
-  // --- Allocation limits (per email / location / calendar day). ---
   const date = todayInTz();
-  const existing = await store.findDayVouchers({ email, locationId, date });
-  const eligibility = checkEligibility({ existing, location, mealType });
+
+  // --- Anti-cheat: one voucher per [ACR_ID] + [shift(=meal type)] per day,
+  // enforced on the accreditation number so a second device / different email
+  // can't double-claim the same meal. This supersedes the old per-email,
+  // per-location limit as the primary guard. ---
+  const acrMeal = await store.findAcrMealVouchers({ accreditationNumber: acr, mealType, date });
+  if (acrMeal.length) {
+    const prior = acrMeal[0];
+    return res.status(409).json({
+      code: 'LIMIT_REACHED',
+      error: `Your ${mealType === 'Meal' ? 'Media Café meal' : mealType} voucher for today has already been issued.`,
+      voucher: { ...prior, status: effectiveStatus(prior, date), qr: await voucherQr(prior.id) },
+    });
+  }
+
+  // Secondary per-location eligibility (kept as a defence-in-depth check).
+  const existingAtLocation = await store.findDayVouchers({ email, locationId, date });
+  const eligibility = checkEligibility({ existing: existingAtLocation, location, mealType });
   if (!eligibility.ok) {
     return res.status(409).json({ code: eligibility.code, error: eligibility.message });
   }
@@ -416,7 +541,7 @@ router.post('/vouchers', voucherLimiter, wrap(async (req, res) => {
   const voucher = {
     id: uid('MV'),
     email,
-    accreditationNumber: user.accreditationNumber,
+    accreditationNumber: acr,
     locationId: location.id,
     locationName: location.name,
     locationType: location.type,
@@ -440,6 +565,9 @@ router.post('/vouchers', voucherLimiter, wrap(async (req, res) => {
     throw err;
   }
 
+  // Transactional audit log — GENERATED. Best-effort (never blocks the issue).
+  logVoucher('GENERATED', voucher, { shiftWindow: mealType, location: location.name });
+
   // QR encodes the Voucher ID (generated server-side, so the client needs no
   // QR library or internet connection). The catering scanner reads this id.
   const qr = await voucherQr(voucher.id);
@@ -457,6 +585,23 @@ router.get('/vouchers', wrap(async (req, res) => {
 
   const today = todayInTz();
   const list = (await store.findUserDayVouchers({ email, date: today }))
+    .sort((a, b) => String(a.issuedAt).localeCompare(String(b.issuedAt)));
+
+  const vouchers = await Promise.all(
+    list.map(async (v) => ({ ...v, status: effectiveStatus(v, today), qr: await voucherQr(v.id) }))
+  );
+  res.json({ date: today, vouchers });
+}));
+
+// Cross-device retrieval: today's active (Pending) vouchers for an accreditation
+// number, each with a fresh QR. On login the client calls this so a voucher
+// generated on a laptop shows instantly on the phone without re-generating.
+router.get('/vouchers/active', wrap(async (req, res) => {
+  const accreditationNumber = String(req.query.accreditation || '').trim();
+  if (!accreditationNumber) return res.status(400).json({ error: 'An accreditation number is required.' });
+
+  const today = todayInTz();
+  const list = (await store.findActiveVouchersByAccreditation({ accreditationNumber, date: today }))
     .sort((a, b) => String(a.issuedAt).localeCompare(String(b.issuedAt)));
 
   const vouchers = await Promise.all(
@@ -665,6 +810,46 @@ router.get('/analytics', requireAdmin, wrap(async (req, res) => {
   });
 }));
 
+// ---- Client Profile (admin) --------------------------------------------------
+// Full meal history for one accredited client, keyed on accreditation number.
+// Powers the Admin "Client Profile" drill-down: generated vs consumed meals.
+router.get('/admin/client-profile', requireAdmin, wrap(async (req, res) => {
+  const accreditation = String(req.query.accreditation || '').trim();
+  const email = String(req.query.email || '').trim().toLowerCase();
+
+  // Resolve the accreditation number from an email if that's what was given.
+  let acr = accreditation;
+  let user = null;
+  if (!acr && email) {
+    user = await store.getUserByEmail(email);
+    if (user) acr = user.accreditationNumber;
+  }
+  if (!acr) return res.status(400).json({ error: 'Provide an accreditation number or a known email.' });
+
+  const today = todayInTz();
+  const [logs, allVouchers] = await Promise.all([
+    store.listVoucherLogsByAccreditation(acr).catch(() => []),
+    store.listVouchers(),
+  ]);
+
+  // Every voucher this accreditation holds (across days), newest first.
+  const vouchers = allVouchers
+    .filter((v) => v.accreditationNumber === acr)
+    .map((v) => ({ ...v, status: effectiveStatus(v, today) }))
+    .sort((a, b) => String(b.issuedAt).localeCompare(String(a.issuedAt)));
+
+  const generated = logs.filter((l) => l.action === 'GENERATED').length;
+  const redeemed = logs.filter((l) => l.action === 'REDEEMED').length;
+
+  res.json({
+    accreditationNumber: acr,
+    email: (user && user.email) || (vouchers[0] && vouchers[0].email) || email || '',
+    summary: { generated, redeemed, outstanding: Math.max(0, generated - redeemed) },
+    logs,
+    vouchers,
+  });
+}));
+
 // ---- Voucher reset (danger zone) ---------------------------------------------
 // Wipes ALL voucher data (Pending, Redeemed, Expired). Counters and the live
 // feed are derived from vouchers, so they reset with it. Users, venues, news
@@ -756,6 +941,14 @@ router.post('/admin/redeem', redeemLimiter, requireRedeemAccess, wrap(async (req
       redeemedAt: fresh && fresh.redeemedAt,
     });
   }
+
+  // Transactional audit log — REDEEMED, with the redeeming location + who
+  // scanned it (admin or volunteer, per the key presented).
+  logVoucher('REDEEMED', redeemed, {
+    shiftWindow: redeemed.mealType,
+    location: redeemed.locationName,
+    scannedBy: req.role || 'staff',
+  });
 
   res.json({ ok: true, code: 'REDEEMED', voucher: redeemed });
 }));

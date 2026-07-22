@@ -356,6 +356,41 @@ async function saveSettings(obj) {
   return data.settings;
 }
 
+// ---- voucher logs (transactional audit trail, keyed on accreditation) --------
+
+async function addVoucherLog(entry) {
+  if (!data.voucherLogs) data.voucherLogs = [];
+  data.voucherLogs.push(entry);
+  // Keep the file bounded — the audit trail is also queryable per-client, and
+  // very old global entries add little value on the single-file backend.
+  if (data.voucherLogs.length > 5000) data.voucherLogs = data.voucherLogs.slice(-5000);
+  persist();
+  return entry;
+}
+
+async function listVoucherLogsByAccreditation(accreditationNumber) {
+  const acr = String(accreditationNumber || '');
+  return (data.voucherLogs || [])
+    .filter((l) => l.accreditationNumber === acr)
+    .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+}
+
+async function findActiveVouchersByAccreditation({ accreditationNumber, date }) {
+  const acr = String(accreditationNumber || '');
+  return (data.vouchers || []).filter(
+    (v) => v.accreditationNumber === acr && v.date === date && v.status === 'Pending'
+  );
+}
+
+// Anti-cheat lookup: any voucher (Pending/Redeemed) this accreditation already
+// holds for a given meal (=shift) on a given day. Non-empty => block a new one.
+async function findAcrMealVouchers({ accreditationNumber, mealType, date }) {
+  const acr = String(accreditationNumber || '');
+  return (data.vouchers || []).filter(
+    (v) => v.accreditationNumber === acr && v.mealType === mealType && v.date === date
+  );
+}
+
 // ---- push subscriptions (Web Push) -------------------------------------------
 
 async function listPushSubscriptions() {
@@ -428,4 +463,8 @@ module.exports = {
   listPushSubscriptions,
   savePushSubscription,
   deletePushSubscription,
+  addVoucherLog,
+  listVoucherLogsByAccreditation,
+  findActiveVouchersByAccreditation,
+  findAcrMealVouchers,
 };

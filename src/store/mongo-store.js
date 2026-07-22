@@ -74,8 +74,20 @@ async function init() {
     keys: { p256dh: String, auth: String },
     createdAt: String,
   }, opts));
+  const voucherLogSchema = new Schema({
+    id: { type: String, unique: true },
+    accreditationNumber: String,
+    voucherId: String,
+    action: String,
+    shiftWindow: String,
+    location: String,
+    scannedBy: String,
+    timestamp: String,
+  }, opts);
+  voucherLogSchema.index({ accreditationNumber: 1, timestamp: -1 });
+  const VoucherLog = model('VoucherLog', voucherLogSchema);
 
-  models = { Meta, Location, User, Voucher, News, Press, Transport, Category, Settings, Tab, Audit, PushSubscription };
+  models = { Meta, Location, User, Voucher, News, Press, Transport, Category, Settings, Tab, Audit, PushSubscription, VoucherLog };
 
   // Ensure indexes (incl. the unique voucher constraint) are built.
   await Promise.all(Object.values(models).map((m) => m.init()));
@@ -359,6 +371,25 @@ async function deletePushSubscription(endpoint) {
   return r.deletedCount > 0;
 }
 
+// ---- voucher logs (transactional audit trail) --------------------------------
+
+async function addVoucherLog(entry) {
+  await models.VoucherLog.create(entry);
+  return entry;
+}
+
+async function listVoucherLogsByAccreditation(accreditationNumber) {
+  return (await models.VoucherLog.find({ accreditationNumber }).sort({ timestamp: -1 }).lean()).map(strip);
+}
+
+async function findActiveVouchersByAccreditation({ accreditationNumber, date }) {
+  return (await models.Voucher.find({ accreditationNumber, date, status: 'Pending' }).sort({ issuedAt: 1 }).lean()).map(strip);
+}
+
+async function findAcrMealVouchers({ accreditationNumber, mealType, date }) {
+  return (await models.Voucher.find({ accreditationNumber, mealType, date }).lean()).map(strip);
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 function pick(obj, keys) {
@@ -415,4 +446,8 @@ module.exports = {
   listPushSubscriptions,
   savePushSubscription,
   deletePushSubscription,
+  addVoucherLog,
+  listVoucherLogsByAccreditation,
+  findActiveVouchersByAccreditation,
+  findAcrMealVouchers,
 };

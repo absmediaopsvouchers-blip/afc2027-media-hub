@@ -22,6 +22,7 @@
     "web-push": "^3.6.7"
   },
   "optionalDependencies": {
+    "firebase-admin": "^12.7.0",
     "mongoose": "^8.4.0",
     "pg": "^8.11.5"
   },

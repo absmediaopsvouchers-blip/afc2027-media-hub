@@ -244,6 +244,34 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; letter-spacing: -.01em; }
 @media (max-width: 620px) { .grid-2 { grid-template-columns: 1fr; } }
 
 /* =============================================================================
+   Meals login gate + signed-in bar
+   ========================================================================== */
+
+/* The exact closed-loop rejection message — shown prominently. */
+.login-error { align-items: flex-start; font-weight: 600; }
+.login-error svg { width: 20px; height: 20px; }
+
+.signed-in-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 14px;
+  background: var(--good-soft); color: var(--good);
+  border: 1px solid rgba(19, 138, 74, .25); border-radius: var(--r-sm);
+  font-size: .88rem; font-weight: 600;
+}
+.signed-in-bar svg { width: 16px; height: 16px; flex: none; }
+.signed-in-bar strong { color: var(--ink); font-weight: 700; }
+.signed-in-bar .mono { color: var(--ink-2); }
+.link-btn {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; cursor: pointer;
+  color: var(--muted); font-weight: 600; font-size: .82rem;
+  padding: 4px 6px; border-radius: 8px;
+}
+.link-btn:hover { background: rgba(0, 0, 0, .05); color: var(--ink); }
+.link-btn svg { width: 15px; height: 15px; }
+
+/* =============================================================================
    Forms
    ========================================================================== */
 

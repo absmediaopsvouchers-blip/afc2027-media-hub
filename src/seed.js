@@ -63,6 +63,10 @@ function getSeedData() {
     // Web Push subscriptions (endpoint + keys) registered by client-app browsers.
     pushSubscriptions: [],
 
+    // Transactional audit trail of voucher generation/redemption, keyed on the
+    // client's accreditation number (see the VoucherLogs feature).
+    voucherLogs: [],
+
     // Managed content categories (used by the News feed). Admin-editable so new
     // categories can be added without code changes. Each has a display colour.
     categories: [

@@ -85,3 +85,17 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   auth        TEXT NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Transactional audit trail of voucher generation/redemption, keyed on the
+-- client's accreditation number (the closed-loop primary key).
+CREATE TABLE IF NOT EXISTS voucher_logs (
+  id                   TEXT PRIMARY KEY,
+  accreditation_number TEXT NOT NULL,
+  voucher_id           TEXT,
+  action               TEXT NOT NULL,          -- 'GENERATED' | 'REDEEMED'
+  shift_window         TEXT,                   -- meal type (Lunch/Dinner/Meal)
+  location             TEXT,
+  scanned_by           TEXT,
+  "timestamp"          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_voucher_logs_acr ON voucher_logs (accreditation_number);

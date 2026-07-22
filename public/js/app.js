@@ -70,6 +70,9 @@ function resolveDefaultTab() {
 // Returning users only enter their email — we cache it locally so the form is
 // pre-filled and the accreditation field stays hidden on subsequent visits.
 const EMAIL_KEY = 'mh.email';
+// Closed-loop auth: the signed-in identity for the Meals/Voucher flow, cached
+// so the user stays signed in across reloads and devices sync by accreditation.
+const AUTH_KEY = 'mh.auth';
 // Today's issued vouchers are cached locally (with their QR images) so they
 // survive closing/reopening the app and are even viewable offline at the counter.
 const VOUCHERS_KEY = 'mh.vouchers';
@@ -84,6 +87,7 @@ const state = {
   myVouchersDate: null,
   news: [], // last-loaded news list (for attachment lookups)
   newsDeepLinkId: null, // article id to scroll to/highlight, set from a #news?article=ID hash
+  auth: null, // signed-in identity for the Meals flow: { email, accreditationNumber, strict, name }
   // Persisted across tab switches so a half-filled form survives navigation.
   form: { email: '', acc: '', known: null, locationId: '', meal: '' },
 };
@@ -109,6 +113,12 @@ function init() {
   // Restore the cached email so returning users skip re-entering it.
   const cached = localStorage.getItem(EMAIL_KEY);
   if (cached) state.form.email = cached;
+
+  // Restore the signed-in Meals identity (closed-loop auth).
+  try {
+    const savedAuth = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+    if (savedAuth && savedAuth.email) { state.auth = savedAuth; state.form.email = savedAuth.email; }
+  } catch (e) { /* ignore malformed cache */ }
 
   buildNavs();
 
@@ -315,24 +325,95 @@ function errorHtml(msg) { return `<div class="alert alert-error">${ICONS.alert}<
    ========================================================================== */
 
 function renderVoucher() {
+  // Closed-loop gate: the Meals flow requires a validated, accredited email.
+  // News / Transport / Press stay public — only this tab is gated.
+  if (!state.auth || !state.auth.email) return renderMealsLogin();
+  return renderVoucherForm();
+}
+
+/* ---- Meals login gate ----------------------------------------------------- */
+
+function renderMealsLogin(errorMsg) {
   const f = state.form;
   view().innerHTML = `
+    ${pageHead('Meal Voucher', 'Sign in with your accredited email to access your meal vouchers.')}
+    <div class="card card-pad">
+      <div id="login-alert">${errorMsg ? `<div class="alert alert-error login-error">${ICONS.ban}<div>${esc(errorMsg)}</div></div>` : ''}</div>
+      <div class="field">
+        <label for="login-email">Accredited email address</label>
+        <input class="input" id="login-email" type="email" inputmode="email" autocomplete="email"
+               placeholder="you@press.example" value="${esc(f.email)}">
+      </div>
+      <button class="btn btn-primary btn-block" id="login-submit">${ICONS.lock}<span>Continue</span></button>
+      <p class="muted" style="font-size:.84rem;margin:12px 2px 0;text-align:center">
+        Only media registered at the MMC/SMC Media Welcome desk can generate meal vouchers.
+      </p>
+    </div>
+  `;
+  const emailEl = document.getElementById('login-email');
+  const submit = () => doMealsLogin(emailEl.value.trim().toLowerCase());
+  document.getElementById('login-submit').addEventListener('click', submit);
+  emailEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  emailEl.focus();
+}
+
+async function doMealsLogin(email) {
+  if (!isEmailLike(email)) { renderMealsLogin('Please enter a valid email address.'); return; }
+  state.form.email = email;
+  const btn = document.getElementById('login-submit');
+  if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner" style="width:18px;height:18px;border-width:2px;margin:0"></span><span>Checking…</span>`; }
+
+  try {
+    const r = await API.post('/auth/login', { email });
+    // Persist the signed-in identity.
+    state.auth = {
+      email,
+      accreditationNumber: r.accreditationNumber || null,
+      strict: !!r.strict,
+      name: r.name || '',
+    };
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify(state.auth)); } catch (e) { /* storage may be blocked */ }
+    rememberEmail(email);
+    // Cross-device: if an active voucher already exists, jump straight to it.
+    renderVoucherForm();
+  } catch (e) {
+    // 403 → the exact closed-loop rejection message; other errors shown plainly.
+    renderMealsLogin(e.message);
+  }
+}
+
+function signOutMeals() {
+  state.auth = null;
+  state.myVouchers = [];
+  try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+  stopTicketPoll();
+  renderMealsLogin();
+}
+
+/* ---- Voucher form (post-login) -------------------------------------------- */
+
+function renderVoucherForm() {
+  const f = state.form;
+  const strict = !!(state.auth && state.auth.strict);
+  // In strict mode the accreditation comes from the roster — never asked for.
+  // In legacy mode we still ask first-timers for their accreditation number.
+  const showAccRow = !strict && f.known !== true;
+  view().innerHTML = `
     ${pageHead('Meal Voucher', 'Generate your digital catering voucher. Limits are enforced centrally, per day.')}
+    <div class="signed-in-bar">
+      ${ICONS.check}
+      <span>Signed in as <strong>${esc(state.auth.email)}</strong>${state.auth.accreditationNumber ? ` · <span class="mono">${esc(state.auth.accreditationNumber)}</span>` : ''}</span>
+      <button type="button" class="link-btn" id="v-signout">${ICONS.logout}<span>Sign out</span></button>
+    </div>
     <div id="v-result"></div>
     <div id="v-mine"></div>
     <div class="card card-pad" id="v-form-card">
       <div id="v-alert"></div>
-      <div class="field">
-        <label for="v-email">Email address</label>
-        <input class="input" id="v-email" type="email" inputmode="email" autocomplete="email"
-               placeholder="you@press.example" value="${esc(f.email)}">
-      </div>
-      <div class="field ${f.known === true ? 'hidden' : ''}" id="v-acc-row">
+      <div class="field ${showAccRow ? '' : 'hidden'}" id="v-acc-row">
         <label for="v-acc">Accreditation number <span class="hint">— first request only</span></label>
         <input class="input" id="v-acc" type="text" autocomplete="off"
                placeholder="AFC-MED-00000" value="${esc(f.acc)}">
       </div>
-      <div class="field ${f.known === true ? '' : 'hidden'}" id="v-known"></div>
       <div class="field">
         <label for="v-location">Location</label>
         <select class="select" id="v-location">${locationOptions(f.locationId)}</select>
@@ -350,9 +431,36 @@ function renderVoucher() {
       `<div class="alert alert-error">${ICONS.alert}<div>Could not load locations. Is the server running?</div></div>`;
   }
 
+  document.getElementById('v-signout').addEventListener('click', signOutMeals);
   wireVoucherForm();
   renderMyVouchers();
-  if (isEmailLike(f.email) && f.known === null) checkUser(f.email);
+  // Cross-device retrieval: pull any active voucher for this identity and show
+  // it straight away, so a voucher made on a laptop appears on the phone.
+  fetchActiveForAuth();
+}
+
+/** Fetch the signed-in user's active voucher(s) and, if any, render one as a
+ *  ticket immediately (bypassing the generate screen). */
+async function fetchActiveForAuth() {
+  if (!state.auth) return;
+  try {
+    let data;
+    if (state.auth.strict && state.auth.accreditationNumber) {
+      data = await API.get('/vouchers/active?accreditation=' + encodeURIComponent(state.auth.accreditationNumber));
+    } else {
+      data = await API.get('/vouchers?email=' + encodeURIComponent(state.auth.email));
+    }
+    const active = (data.vouchers || []).filter((v) => v.status === 'Pending');
+    state.myVouchers = data.vouchers || [];
+    state.myVouchersDate = data.date;
+    saveCachedVouchers();
+    if (active.length) {
+      // Show the most recent active voucher directly.
+      showTicket(active[active.length - 1], false);
+    } else {
+      renderMyVouchers();
+    }
+  } catch (e) { /* best-effort — the form still works */ }
 }
 
 function locationOptions(selectedId) {
@@ -406,14 +514,6 @@ function updateMeals(locationId) {
 function wireVoucherForm() {
   updateMeals(state.form.locationId);
 
-  document.getElementById('v-email').addEventListener('change', (e) => {
-    const email = e.target.value.trim().toLowerCase();
-    state.form.email = email;
-    state.form.known = null;
-    if (isEmailLike(email)) { checkUser(email); fetchMyVouchers(email); }
-    else { showUnknown(); state.myVouchers = []; renderMyVouchers(); }
-  });
-
   const accEl = document.getElementById('v-acc');
   if (accEl) accEl.addEventListener('input', (e) => { state.form.acc = e.target.value; });
 
@@ -430,6 +530,13 @@ function wireVoucherForm() {
   });
 
   document.getElementById('v-submit').addEventListener('click', submitVoucher);
+
+  // Legacy mode only: figure out whether this email is already on file so the
+  // accreditation row shows only for genuine first-timers. Strict mode never
+  // asks for accreditation (it comes from the roster).
+  if (!(state.auth && state.auth.strict) && isEmailLike(state.auth.email) && state.form.known === null) {
+    checkUser(state.auth.email);
+  }
 }
 
 async function checkUser(email) {
@@ -476,18 +583,17 @@ function vAlert(type, msg) {
 function vClearAlert() { const a = document.getElementById('v-alert'); if (a) a.innerHTML = ''; }
 
 async function submitVoucher() {
-  const email = document.getElementById('v-email').value.trim().toLowerCase();
+  const email = (state.auth && state.auth.email) || state.form.email;
   const accEl = document.getElementById('v-acc');
   const acc = accEl ? accEl.value.trim() : state.form.acc;
   const locationId = document.getElementById('v-location').value;
   const meal = state.form.meal;
 
-  state.form.email = email;
   state.form.acc = acc;
   state.form.locationId = locationId;
   vClearAlert();
 
-  if (!isEmailLike(email)) { vAlert('error', 'Please enter a valid email address.'); return; }
+  if (!isEmailLike(email)) { signOutMeals(); return; }
   if (!locationId) { vAlert('error', 'Please choose a location.'); return; }
   if (!meal) { vAlert('error', 'Please choose a meal type.'); return; }
 
@@ -502,11 +608,21 @@ async function submitVoucher() {
     showTicket(r.voucher, r.registeredNow);
     toast('Voucher issued', 'success');
   } catch (e) {
-    if (e.code === 'ACCREDITATION_REQUIRED') {
+    if (e.code === 'NOT_ACCREDITED') {
+      // Roster no longer recognises this email — bounce back to the gate.
+      signOutMeals();
+      renderMealsLogin(e.message);
+      return;
+    } else if (e.code === 'ACCREDITATION_REQUIRED') {
       showUnknown();
       vAlert('warn', e.message);
       const el = document.getElementById('v-acc');
       if (el) el.focus();
+    } else if (e.code === 'LIMIT_REACHED' && e.data && e.data.voucher) {
+      // Already issued today — show the existing voucher instead of an error.
+      addMyVoucher(e.data.voucher);
+      showTicket(e.data.voucher, false);
+      toast('Voucher already issued for this meal today.', 'info');
     } else {
       vAlert('error', e.message);
     }
