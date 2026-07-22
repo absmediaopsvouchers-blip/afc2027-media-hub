@@ -515,16 +515,17 @@ router.post('/vouchers', voucherLimiter, wrap(async (req, res) => {
 
   const date = todayInTz();
 
-  // --- Anti-cheat: one voucher per [ACR_ID] + [shift(=meal type)] per day,
-  // enforced on the accreditation number so a second device / different email
-  // can't double-claim the same meal. This supersedes the old per-email,
-  // per-location limit as the primary guard. ---
-  const acrMeal = await store.findAcrMealVouchers({ accreditationNumber: acr, mealType, date });
+  // --- Anti-cheat: one voucher per [ACR_ID] + [location] + [shift(=meal type)]
+  // per day, enforced on the accreditation number so a second device / different
+  // email can't double-claim the SAME meal at the SAME venue. Scoped per-location
+  // so a client can legitimately hold Lunch + Dinner at the MMC and a Media Café
+  // Meal at each stadium they attend. ---
+  const acrMeal = await store.findAcrMealVouchers({ accreditationNumber: acr, locationId, mealType, date });
   if (acrMeal.length) {
     const prior = acrMeal[0];
     return res.status(409).json({
       code: 'LIMIT_REACHED',
-      error: `Your ${mealType === 'Meal' ? 'Media Café meal' : mealType} voucher for today has already been issued.`,
+      error: `Your ${mealType === 'Meal' ? 'Media Café meal' : mealType} voucher at ${location.name} for today has already been issued.`,
       voucher: { ...prior, status: effectiveStatus(prior, date), qr: await voucherQr(prior.id) },
     });
   }

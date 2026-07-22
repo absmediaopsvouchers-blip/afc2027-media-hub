@@ -383,11 +383,15 @@ async function findActiveVouchersByAccreditation({ accreditationNumber, date }) 
 }
 
 // Anti-cheat lookup: any voucher (Pending/Redeemed) this accreditation already
-// holds for a given meal (=shift) on a given day. Non-empty => block a new one.
-async function findAcrMealVouchers({ accreditationNumber, mealType, date }) {
+// holds for a given meal (=shift) at a given LOCATION on a given day. Non-empty
+// => block a new one. Scoped per-location so a client can legitimately hold
+// Lunch+Dinner at the MMC and a Media Café Meal at each stadium they attend,
+// while still being blocked from double-claiming the same meal at the same
+// venue from a second device.
+async function findAcrMealVouchers({ accreditationNumber, locationId, mealType, date }) {
   const acr = String(accreditationNumber || '');
   return (data.vouchers || []).filter(
-    (v) => v.accreditationNumber === acr && v.mealType === mealType && v.date === date
+    (v) => v.accreditationNumber === acr && v.locationId === locationId && v.mealType === mealType && v.date === date
   );
 }
 

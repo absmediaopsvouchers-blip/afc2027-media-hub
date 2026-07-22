@@ -687,10 +687,10 @@ async function findActiveVouchersByAccreditation({ accreditationNumber, date }) 
   return rows.map(toVoucher);
 }
 
-async function findAcrMealVouchers({ accreditationNumber, mealType, date }) {
+async function findAcrMealVouchers({ accreditationNumber, locationId, mealType, date }) {
   const { rows } = await q(
-    'SELECT * FROM vouchers WHERE accreditation_number = $1 AND meal_type = $2 AND date = $3',
-    [accreditationNumber, mealType, date]
+    'SELECT * FROM vouchers WHERE accreditation_number = $1 AND location_id = $2 AND meal_type = $3 AND date = $4',
+    [accreditationNumber, locationId, mealType, date]
   );
   return rows.map(toVoucher);
 }

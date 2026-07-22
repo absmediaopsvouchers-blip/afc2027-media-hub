@@ -386,8 +386,8 @@ async function findActiveVouchersByAccreditation({ accreditationNumber, date }) 
   return (await models.Voucher.find({ accreditationNumber, date, status: 'Pending' }).sort({ issuedAt: 1 }).lean()).map(strip);
 }
 
-async function findAcrMealVouchers({ accreditationNumber, mealType, date }) {
-  return (await models.Voucher.find({ accreditationNumber, mealType, date }).lean()).map(strip);
+async function findAcrMealVouchers({ accreditationNumber, locationId, mealType, date }) {
+  return (await models.Voucher.find({ accreditationNumber, locationId, mealType, date }).lean()).map(strip);
 }
 
 // ---- helpers ----------------------------------------------------------------
