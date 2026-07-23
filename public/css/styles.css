@@ -54,9 +54,21 @@
 
 * { box-sizing: border-box; }
 
-html { height: 100%; }
+/* Lock the text scale. Without these, iOS Safari (and Android Chrome in some
+   cases) auto-inflate font sizes on rotation / when a page is deemed
+   "text-heavy", and iOS re-applies its own zoom when a page is launched as a
+   standalone home-screen app — both cause the font-size jumps and layout
+   shifts this fixes. Applied to html AND body for full coverage. */
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 body {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   margin: 0;
   font-family: var(--font);
   color: var(--ink);
@@ -64,16 +76,12 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   line-height: 1.5;
-  /* App-shell: pin to the layout viewport with position:fixed + inset:0 rather
-     than height:100dvh. On iOS home-screen PWAs, dvh/vh mis-measure on first
-     paint (leaving a dead strip at the bottom that only a rotate fixes, and a
-     brief nav "shake" as it corrects) and the window scrolls the header under
-     the status bar when the keyboard opens. inset:0 sizes to the full layout
-     viewport immediately and stays put through keyboard show/hide, so the
-     header never jams and the bottom nav never drifts. The .view scrolls
-     internally. */
-  position: fixed;
-  inset: 0;
+  /* App-shell: html+body are height:100% so the flex column fills the layout
+     viewport reliably (this is what resolved the iOS bottom gap alongside the
+     network-first SW that keeps the viewport-fit=cover HTML fresh). overflow is
+     hidden here so .view is the single internal scroller — focusing an input
+     scrolls .view, not the window, which keeps the header from jamming under
+     the status bar when the keyboard opens. */
   display: flex;
   flex-direction: column;
   overflow: hidden;
